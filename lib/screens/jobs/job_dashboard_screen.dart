@@ -5,6 +5,7 @@ import '../../models/worker.dart';
 import '../../services/firebase_service.dart';
 import 'job_detail_screen.dart';
 import '../../models/user.dart';
+import '../payment/payment_screen.dart';
 
 class JobDashboardScreen extends StatefulWidget {
   const JobDashboardScreen({super.key});
@@ -68,6 +69,7 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
       await _loadJobs();
     } catch (e) {
       _showErrorSnackbar('Error loading data: $e');
+      print('Error loading data: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -81,18 +83,36 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
 
     try {
       if (_isWorker) {
-        final [assignedJobs, appliedJobs, worksForMeJobs, workerjobs] =
-            await Future.wait([
-          _firebaseService.getWorkerJobs(userId),
-          _firebaseService.getAppliedJobs(userId),
-          _firebaseService.getWorkerAssignedJobs(userId),
-        ]);
+        final assignedJobs = await _firebaseService.getWorkerJobs(userId);
+
+        // For worksForMeJobs, also include assigned jobs with appropriate status
+        final worksForMeJobs =
+            await _firebaseService.getWorkerAssignedJobs(userId);
+
+        // If empty, fall back to assigned jobs with 'accepted' or 'in_progress' status
+        final effectiveWorksForMe = worksForMeJobs.isNotEmpty
+            ? worksForMeJobs
+            : assignedJobs
+                .where((job) => [
+                      'accepted',
+                      'in_progress',
+                      'assigned',
+                      'cancelled',
+                      'completed',
+                      'rejected',
+                      'started working'
+                    ].contains(job.status.toLowerCase()))
+                .toList();
+
+        final appliedJobs = await _firebaseService.getAppliedJobs(userId);
 
         setState(() {
           _myJobs = assignedJobs;
           _appliedJobs = appliedJobs;
-          _assignedJobs = worksForMeJobs;
+          _assignedJobs = effectiveWorksForMe; // Use the effective list
         });
+
+        print('Final works for me jobs: ${_assignedJobs.length}');
       } else {
         // For clients, fetch both posted jobs and requested jobs in parallel
         final [postedJobs, requestedJobs] = await Future.wait([
@@ -106,14 +126,8 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
         });
       }
     } catch (e) {
+      print('Error loading jobs: $e');
       _showErrorSnackbar('Error loading jobs: $e');
-      // Optionally reset state on error
-      setState(() {
-        _myJobs = [];
-        _appliedJobs = [];
-        _assignedJobs = [];
-        _requestedJobs = [];
-      });
     } finally {
       setState(() => _isLoading = false);
     }
@@ -133,10 +147,14 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
     }
   }
 
-  Future<void> _acceptApplication(Job job, String workerId) async {
+  Future<void> _acceptApplication(
+    Job job,
+    String workerId,
+    String clientId,
+  ) async {
     try {
       setState(() => _isLoading = true);
-      await _firebaseService.acceptJobApplication(job.id, workerId);
+      await _firebaseService.acceptJobApplication(job.id, workerId, clientId);
       _showSuccessSnackbar('Application accepted!');
       await _loadJobs();
     } catch (e) {
@@ -356,7 +374,33 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
   }
 
   Widget _buildWorksForMeView() {
-    final filteredJobs = _applyStatusFilter(_assignedJobs);
+    // First, ensure we're showing all relevant statuses for active work
+    List<Job> filteredJobs = _assignedJobs.where((job) {
+      return [
+        'accepted',
+        'in_progress',
+        'completed',
+        'assigned',
+        'cancelled',
+        'rejected',
+        'started working'
+      ].contains(job.status.toLowerCase());
+    }).toList();
+
+    // Apply additional filter if selected
+    if (_selectedFilterIndex > 0) {
+      final filter = [
+        'all',
+        'accepted',
+        'in_working',
+        'completed',
+        'cancelled'
+      ][_selectedFilterIndex];
+
+      filteredJobs = filteredJobs
+          .where((job) => job.status.toLowerCase() == filter)
+          .toList();
+    }
 
     return Column(
       children: [
@@ -366,7 +410,7 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
         Align(
           alignment: const Alignment(0.9, -1),
           child: Text(
-            '${filteredJobs.length} job${filteredJobs.length == 1 ? '' : 's'}',
+            '${filteredJobs.length} active job${filteredJobs.length == 1 ? '' : 's'}',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ),
@@ -383,6 +427,10 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                   itemBuilder: (context, index) => _buildJobCard(
                     filteredJobs[index],
                     showCompleteButton: true,
+                    showActiveWorkActions: true,
+                    showApplications: false,
+
+                    // Add any other relevant parameters
                   ),
                 ),
         ),
@@ -565,6 +613,7 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
     bool showStatus = false,
     bool showApplications = true,
     bool checkbutton = true,
+    bool showActiveWorkActions = false,
   }) {
     final filteredJobs = _applyStatusFilter(
       showStatus ? _appliedJobs : _myJobs,
@@ -577,6 +626,7 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
 
     final statusColor = _getStatusColor(job.status);
     final formattedDate = job.scheduledDate != null;
+    print('this is the date formatt$formattedDate');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -667,12 +717,27 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                           : '${job.applications.length} ${job.applications.length == 1 ? 'Applicant' : 'Applicants'}',
                       color: secondaryColor,
                     )
-                  else
+                  else if (job.status != 'completed')
                     _buildDetailItem(
                       Icons.person_outline,
                       job.applications.isEmpty
                           ? 'wating for worker to accept'
                           : 'your working is on pendign',
+                    ),
+                  if (job.status == 'completed' && !_isWorker)
+                    _buildActionButton(
+                      'Pay',
+                      Icons.payment,
+                      Colors.purple,
+                      () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PaymentScreen(
+                                job: job,
+                              ),
+                            ));
+                      },
                     ),
                 ],
               ),
@@ -806,6 +871,45 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                       SizedBox()
                 ],
               ),
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    children: [
+                      if (showActiveWorkActions &&
+                          job.status !=
+                              'completed') // Moved the condition inside children
+                        Row(
+                          children: [
+                            if (job.status == 'started working' &&
+                                _isWorker &&
+                                job.status != 'completed')
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () => _startWork(job),
+                                  child: const Text('Start Work'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => _completeJob(job),
+                                child: const Text('Complete'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                    ],
+                  ),
+                ),
+              )
             ],
           ),
         ),
@@ -1115,10 +1219,10 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                                                     color: Colors.amber),
                                                 const SizedBox(width: 2),
                                                 Text(
-                                                  applicant.rating
-                                                          ?.toStringAsFixed(
-                                                              1) ??
-                                                      '0.0',
+                                                  applicant.rating == null
+                                                      ? '0.0'
+                                                      : applicant.rating
+                                                          .toStringAsFixed(1),
                                                   style: TextStyle(
                                                     fontSize: 14,
                                                     color: Colors.grey[700],
@@ -1175,7 +1279,12 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                                     children: [
                                       ElevatedButton(
                                         onPressed: () => _acceptApplication(
-                                            job, applicant.id),
+                                          job,
+                                          applicantId,
+                                          _firebaseService
+                                              .getCurrentUser()!
+                                              .uid,
+                                        ),
                                         style: ElevatedButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 16, vertical: 8),
@@ -1412,9 +1521,27 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
       setState(() => _isLoading = true);
       await _firebaseService.updateJobStatus(
         job.id,
-        job.clientId,
         job.seekerId,
+        job.clientId,
         'completed',
+      );
+      _showSuccessSnackbar('Job marked as completed!');
+      await _loadJobs();
+    } catch (e) {
+      _showErrorSnackbar('Error completing job: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _startWork(Job job) async {
+    try {
+      setState(() => _isLoading = true);
+      await _firebaseService.updateJobStatus(
+        job.id,
+        job.workerId,
+        job.clientId,
+        'started working',
       );
       _showSuccessSnackbar('Job marked as completed!');
       await _loadJobs();
@@ -1489,7 +1616,8 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
   Future<void> _acceptApplicant(String workerId) async {
     try {
       setState(() => _isLoading = true);
-      await _firebaseService.acceptJobApplication(widget.job.id, workerId);
+      await _firebaseService.acceptJobApplication(
+          widget.job.id, workerId, widget.job.clientId);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Applicant accepted successfully!'),

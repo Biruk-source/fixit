@@ -1522,71 +1522,77 @@ class FirebaseService {
     }
   }
 
+  /// Creates a job request and syncs it across client and professional collections.
+  /// Returns the job ID if successful, null if it fails (e.g., pro unavailable).
   Future<String?> createJobRequest({
-    required String clientId,
-    required String professionalId,
-    required String title,
-    required String description,
-    required String location,
-    required double budget,
-    DateTime? scheduledDate,
+    required String clientId, // Who’s droppin’ the gig
+    required String professionalId, // Who’s pickin’ it up
+    required String title, // What’s the gig called
+    required String description, // Spill the deets
+    required String location, // Where it’s goin’ down
+    required double budget, // How much ETB we talkin’
+    DateTime? scheduledDate, // When it’s happenin’ (optional)
   }) async {
     try {
-      // If a scheduled date is provided, check availability for that date
+      print('🚀 Kickin’ off job request creation...');
+      print('👤 Client: $clientId | 👨‍💻 Pro: $professionalId');
+
+      // Check if the pro’s free when we need ‘em
       if (scheduledDate != null) {
         final isAvailable =
             await checkDayAvailability(professionalId, scheduledDate);
         if (!isAvailable) {
-          print(
-              'Professional $professionalId might not be available on $scheduledDate');
+          print('📅 $professionalId’s booked on $scheduledDate—can’t do it!');
           return null;
         }
+        print('✅ $professionalId’s good for $scheduledDate');
       } else {
-        // If no scheduled date, check general availability (e.g., for immediate jobs)
         final isAvailable = await checkProfessionalAvailability(professionalId);
         if (!isAvailable) {
-          print('Professional $professionalId is not available');
+          print('🚫 $professionalId’s too busy right now');
           return null;
         }
+        print('✅ $professionalId’s ready to roll!');
       }
 
-      // Get client and professional info
+      // Fetch client and pro profiles—make sure they exist
+      print('🔍 Lookin’ up client and pro deets...');
       final clientDoc =
-          await _firestore.collection('users').doc(clientId).get();
-      print(clientId);
-      final professionalDoc = await _firestore
+          await _firestore.collection('clients').doc(clientId).get();
+      final proDoc = await _firestore
           .collection('professionals')
           .doc(professionalId)
           .get();
 
-      if (!clientDoc.exists || !professionalDoc.exists) {
-        print('Client or professional not found');
+      if (!clientDoc.exists) {
+        print('❌ Client $clientId ain’t in the system');
+        return null;
+      }
+      if (!proDoc.exists) {
+        print('❌ Pro $professionalId ain’t found');
         return null;
       }
 
       final clientData = clientDoc.data() as Map<String, dynamic>;
-      final professionalData = professionalDoc.data() as Map<String, dynamic>;
+      final proData = proDoc.data() as Map<String, dynamic>;
+      print(
+          '👤 Found client: ${clientData['name']} | 👨‍💻 Found pro: ${proData['name']}');
 
-      // Create a single document ID to be used across all collections
-      final jobId = _firestore
-          .collection('users')
-          .doc(clientId)
-          .collection('requests')
-          .doc()
-          .id;
+      // Generate a single job ID for all collections
+      final jobId = _firestore.collection('jobs').doc().id;
+      print('🆔 New job ID: $jobId');
 
-      // Prepare job data
+      // Build the job data with fallback vibes
       Map<String, dynamic> jobData = {
         'clientId': clientId,
-        'clientName': clientData['name'] ?? 'Unknown Client',
-        'clientphone': clientData['phone'] ?? 'Unknown Phone Number',
-        'clientemail': clientData['email'] ?? 'Unknown Email',
+        'clientName': clientData['name'] ?? 'Mystery Client',
+        'clientPhone': clientData['phoneNumber'] ?? 'No Phone',
+        'clientEmail': clientData['email'] ?? 'No Email',
         'workerId': professionalId,
-        'workerName': professionalData['name'] ?? 'Unknown Professional',
-        'workerphone':
-            professionalData['phoneNumber'] ?? 'Unknown Phone Number',
-        'experience': professionalData['experience'] ?? 'Unknown Experience',
-        'profession': professionalData['profession'] ?? 'Service Provider',
+        'workerName': proData['name'] ?? 'Unknown Pro',
+        'workerPhone': proData['phoneNumber'] ?? 'No Phone',
+        'workerExperience': proData['experience'] ?? 0,
+        'profession': proData['profession'] ?? 'All-Star',
         'title': title,
         'description': description,
         'location': location,
@@ -1596,71 +1602,97 @@ class FirebaseService {
         'scheduledDate':
             scheduledDate != null ? Timestamp.fromDate(scheduledDate) : null,
         'lastUpdated': FieldValue.serverTimestamp(),
+        'applications': [], // Keep track of who’s applyin’
+        'priority': budget > 1000
+            ? 'high'
+            : 'normal', // Extra feature: prioritize big bucks
       };
 
-      // Batch write to ensure all operations succeed or fail together
+      // Batch it up—atomic writes for the win
       final batch = _firestore.batch();
+      print('📦 Batchin’ up the writes...');
 
-      // Save job in all collections with the same ID
-      batch.set(
-          _firestore
-              .collection('users')
-              .doc(clientId)
-              .collection('requests')
-              .doc(jobId),
-          jobData);
-      batch.set(
-          _firestore
-              .collection('users')
-              .doc(clientId)
-              .collection('jobs')
-              .doc(jobId),
-          jobData);
-      batch.set(
-          _firestore
-              .collection('professionals')
-              .doc(professionalId)
-              .collection('jobs')
-              .doc(jobId),
-          jobData);
-      batch.set(
-          _firestore
-              .collection('professionals')
-              .doc(professionalId)
-              .collection('requests')
-              .doc(jobId),
-          jobData);
+      // Main jobs collection
+      batch.set(_firestore.collection('jobs').doc(jobId), jobData);
 
-      await batch.commit();
+      // Client’s side
+      batch.set(
+        _firestore
+            .collection('clients')
+            .doc(clientId)
+            .collection('requests')
+            .doc(jobId),
+        jobData,
+      );
+      batch.set(
+        _firestore
+            .collection('clients')
+            .doc(clientId)
+            .collection('jobs')
+            .doc(jobId),
+        jobData,
+      );
 
+      // Pro’s side
+      batch.set(
+        _firestore
+            .collection('professionals')
+            .doc(professionalId)
+            .collection('requests')
+            .doc(jobId),
+        jobData,
+      );
+      batch.set(
+        _firestore
+            .collection('professionals')
+            .doc(professionalId)
+            .collection('jobs')
+            .doc(jobId),
+        jobData,
+      );
+
+      // Lock the date if scheduled
       if (scheduledDate != null) {
         final dateString =
             '${scheduledDate.year}-${scheduledDate.month.toString().padLeft(2, '0')}-${scheduledDate.day.toString().padLeft(2, '0')}';
-        await _firestore
-            .collection('professionals')
-            .doc(professionalId)
-            .collection('availability')
-            .doc(dateString)
-            .set({
-          'isAvailable': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        print('Set availability to false for $professionalId on $dateString');
+        batch.set(
+          _firestore
+              .collection('professionals')
+              .doc(professionalId)
+              .collection('availability')
+              .doc(dateString),
+          {
+            'isAvailable': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'jobId': jobId, // Link it to this job—extra dope feature
+          },
+          SetOptions(merge: true),
+        );
+        print('📅 Locked $dateString for $professionalId');
       }
 
-      // Create notification for professional
+      // Commit the batch—make it official
+      await batch.commit();
+      print('✅ Job $jobId is live across all collections!');
+
+      // Notify the pro with some swagger
       await _createNotification(
         userId: professionalId,
-        title: 'New Job Request',
-        body: 'You have a new job request: $title',
+        title: 'Yo, New Gig Dropped!',
+        body:
+            '$title just came in—${clientData['name'] ?? 'someone'} needs you!',
         type: 'job_request',
-        data: {'jobId': jobId},
+        data: {
+          'jobId': jobId,
+          'budget': budget,
+          'scheduledDate': scheduledDate?.toIso8601String(),
+        },
       );
+      print('🔔 Pro $professionalId got the memo!');
 
-      print('Job request created with ID: $jobId');
       return jobId;
     } catch (e) {
-      print('Error creating job request: $e');
+      print('🔥 Whoops, somethin’ broke: $e');
       return null;
     }
   }
@@ -1786,9 +1818,11 @@ class FirebaseService {
     return slots?.map((slot) => slot as bool).toList() ?? List.filled(9, true);
   }
 
-  Future<void> acceptJobApplication(String jobId, String workerId) async {
+  Future<void> acceptJobApplication(
+      String jobId, String workerId, String clientId) async {
     // Create a batch write to ensure all operations succeed or fail together
     final batch = _firestore.batch();
+    print('this is from acceptjobapplication  ::: id of client $clientId');
 
     // 1. Update the main job document
     final jobRef = _firestore.collection('jobs').doc(jobId);
@@ -1808,11 +1842,27 @@ class FirebaseService {
         .doc(workerId)
         .collection('assigned_jobs')
         .doc(jobId);
-    batch.set(workerJobRef, {
-      'jobId': jobId,
-      'status': 'assigned',
-      'assignedAt': FieldValue.serverTimestamp(),
-    });
+    final userjobRef = _firestore
+        .collection('users')
+        .doc(clientId)
+        .collection('jobs')
+        .doc(jobId);
+    batch.set(
+        workerJobRef,
+        {
+          'jobId': jobId,
+          'status': 'assigned',
+          'assignedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true));
+    batch.set(
+        userjobRef,
+        {
+          'jobId': jobId,
+          'status': 'assigned',
+          'assignedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true));
 
     // 3. Update worker's document with assigned jobs array
     final workerRef = _firestore.collection('professionals').doc(workerId);
@@ -1833,8 +1883,6 @@ class FirebaseService {
   Future<List<Job>> getworkersactivejob(String userID) async {
     try {
       QuerySnapshot snapshot = await _firestore
-          .collection('users')
-          .doc(userID)
           .collection('jobs')
           .where('status', isEqualTo: 'assigned')
           .orderBy('createdAt', descending: true)
@@ -1860,7 +1908,7 @@ class FirebaseService {
           .where('status', isEqualTo: 'assigned')
           .orderBy('createdAt', descending: true)
           .get();
-
+      print('this is worker id form getworkereassignedjobs$workerId');
       return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;

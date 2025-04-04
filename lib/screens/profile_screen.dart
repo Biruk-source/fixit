@@ -167,11 +167,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: Colors.white,
-                    backgroundImage:
-                        profileImage != null && profileImage.isNotEmpty
-                            ? NetworkImage(profileImage)
-                            : const AssetImage('assets/images/default_profile.png')
-                                as ImageProvider,
+                    backgroundImage: profileImage != null &&
+                            profileImage.isNotEmpty
+                        ? NetworkImage(profileImage)
+                        : const AssetImage('assets/images/default_profile.png')
+                            as ImageProvider,
                   ),
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -512,7 +512,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ? 5
                         : jobs.length, // Show max 3 jobs in profile
                     itemBuilder: (context, index) {
-                      final job = jobs[index];
+                      final job = jobs.length > index ? jobs[index] : null;
+                      if (job == null) return Container();
                       return _buildJobHistoryItem(job);
                     },
                   ),

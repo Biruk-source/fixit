@@ -7,6 +7,11 @@ import '../../services/firebase_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 
+// Yo, let’s define a custom green theme for the whole screen
+const Color kPrimaryGreen = Color(0xFF2E7D32); // Deep forest green
+const Color kAccentGreen = Color(0xFF66BB6A); // Fresh lime green
+const Color kLightGreen = Color(0xFFE8F5E9); // Soft green background
+
 class CreateJobScreen extends StatefulWidget {
   final String? preselectedWorkerId;
 
@@ -22,17 +27,17 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   bool _isLoading = false;
   Worker? _selectedWorker;
 
-  // Form controllers
+  // Controllers for the form fields
   final _titleController = TextEditingController();
-
   final _descriptionController = TextEditingController();
   final _budgetController = TextEditingController();
   final _locationController = TextEditingController();
 
-  // New state variables
+  // Extra state for cool features
   DateTime? _selectedDate;
   DateTime _focusedDay = DateTime.now();
   List<File> _attachments = [];
+  bool _isUrgent = false; // New feature: mark job as urgent
 
   @override
   void initState() {
@@ -49,31 +54,26 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     super.dispose();
   }
 
+  // Load preselected worker if passed in
   Future<void> _loadPreselectedWorker() async {
     if (widget.preselectedWorkerId != null) {
-      setState(() {
-        _isLoading = true;
-      });
-
+      setState(() => _isLoading = true);
       try {
         final worker =
             await _firebaseService.getWorkerById(widget.preselectedWorkerId!);
         setState(() {
           _selectedWorker = worker;
-          if (worker != null) {
-            _locationController.text = worker.location;
-          }
+          if (worker != null) _locationController.text = worker.location;
         });
       } catch (e) {
         print('Error loading worker: $e');
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
+  // Upload attachments to Firebase Storage with a clean vibe
   Future<List<String>> _uploadAttachments() async {
     final firebase_storage.FirebaseStorage storage =
         firebase_storage.FirebaseStorage.instance;
@@ -81,10 +81,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     try {
       final user = _firebaseService.getCurrentUser();
       if (user == null) throw 'User not logged in';
-
       for (var file in _attachments) {
         final fileName =
             '${user.uid}_${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
+        final ref = storage.ref().child('job_attachments/$fileName');
+        await ref.putFile(file);
+        final url = await ref.getDownloadURL();
+        downloadUrls.add(url);
       }
     } catch (e) {
       print('Error uploading attachments: $e');
@@ -93,19 +96,13 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     return downloadUrls;
   }
 
+  // Create the job with all the dope details
   Future<void> _createJob() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
+      setState(() => _isLoading = true);
       try {
-        // Upload attachments if any
-        List<String> attachmentUrls = [];
-        if (_attachments.isNotEmpty) {
-          attachmentUrls = await _uploadAttachments();
-        }
-
+        List<String> attachmentUrls =
+            _attachments.isNotEmpty ? await _uploadAttachments() : [];
         final jobData = {
           'title': _titleController.text,
           'description': _descriptionController.text,
@@ -116,39 +113,34 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           'scheduledDate':
               _selectedDate != null ? Timestamp.fromDate(_selectedDate!) : null,
           'attachments': attachmentUrls,
+          'isUrgent': _isUrgent, // New feature: urgent flag
         };
 
-        if (_selectedWorker != null) {
+        if (_selectedWorker != null)
           jobData['applications'] = [_selectedWorker!.id];
-        }
-
-        final jobId = await _firebaseService.createJob(jobData);
+        await _firebaseService.createJob(jobData);
 
         if (!mounted) return;
-
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Job created successfully!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Text('Job posted successfully!'),
+            backgroundColor: kAccentGreen,
+            behavior: SnackBarBehavior.floating,
           ),
         );
-
-        if (widget.preselectedWorkerId != null) {
-          Navigator.pop(context);
-        }
         Navigator.pop(context);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: Colors.redAccent),
         );
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
+  // Pick files with a smooth flow
   Future<void> _pickFiles() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -156,26 +148,27 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         type: FileType.custom,
         allowedExtensions: ['jpg', 'png', 'pdf'],
       );
-
       if (result != null) {
-        setState(() {
-          _attachments = result.paths.map((path) => File(path!)).toList();
-        });
+        setState(() =>
+            _attachments = result.paths.map((path) => File(path!)).toList());
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text('Error picking files: $e'),
-            backgroundColor: Colors.red),
+            backgroundColor: Colors.redAccent),
       );
     }
   }
 
+  // Pop up that slick calendar
   void _showCalendarDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Date'),
+        backgroundColor: kLightGreen,
+        title:
+            const Text('Pick a Date', style: TextStyle(color: kPrimaryGreen)),
         content: SizedBox(
           width: double.maxFinite,
           child: TableCalendar(
@@ -191,26 +184,25 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               Navigator.pop(context);
             },
             calendarFormat: CalendarFormat.month,
-            headerStyle: const HeaderStyle(
+            headerStyle: HeaderStyle(
               formatButtonVisible: false,
               titleCentered: true,
+              titleTextStyle: const TextStyle(
+                  color: kPrimaryGreen, fontWeight: FontWeight.bold),
             ),
             calendarStyle: CalendarStyle(
-              selectedDecoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                shape: BoxShape.circle,
-              ),
+              selectedDecoration: const BoxDecoration(
+                  color: kAccentGreen, shape: BoxShape.circle),
               todayDecoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
+                  color: kPrimaryGreen.withOpacity(0.5),
+                  shape: BoxShape.circle),
             ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: kPrimaryGreen)),
           ),
         ],
       ),
@@ -220,11 +212,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: kLightGreen, // Light green backdrop
       appBar: AppBar(
         title: const Text('Post a Job'),
+        backgroundColor: kPrimaryGreen,
+        elevation: 0,
+        foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: kAccentGreen))
           : Form(
               key: _formKey,
               child: SingleChildScrollView(
@@ -232,173 +228,204 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Selected worker card with green accents
                     if (_selectedWorker != null)
                       Card(
-                        margin: const EdgeInsets.only(bottom: 16),
+                        elevation: 4,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
+                        color: Colors.white,
                         child: Padding(
                           padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              const Text(
-                                'Selected Professional',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundImage:
+                                    NetworkImage(_selectedWorker!.profileImage),
+                                onBackgroundImageError: (_, __) {},
+                                child: _selectedWorker!.profileImage.isEmpty
+                                    ? const Icon(Icons.person,
+                                        color: kPrimaryGreen)
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _selectedWorker!.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: kPrimaryGreen,
+                                      ),
+                                    ),
+                                    Text(_selectedWorker!.profession,
+                                        style: const TextStyle(
+                                            color: Colors.grey)),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 20,
-                                    backgroundImage: NetworkImage(
-                                        _selectedWorker!.profileImage),
-                                    onBackgroundImageError: (_, __) {},
-                                    child: _selectedWorker!.profileImage.isEmpty
-                                        ? const Icon(Icons.person, size: 20)
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _selectedWorker!.name,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        Text(_selectedWorker!.profession),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    '${_selectedWorker!.priceRange.toInt()} ETB/hr',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                ],
+                              Text(
+                                '${_selectedWorker!.priceRange.toInt()} ETB/hr',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: kAccentGreen),
                               ),
                             ],
                           ),
                         ),
                       ),
+                    const SizedBox(height: 20),
+
+                    // Job Title field with green borders
                     TextFormField(
                       controller: _titleController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Job Title',
-                        hintText:
-                            'e.g. Fix Leaking Sink, Install Air Conditioner',
-                        border: OutlineInputBorder(),
+                        hintText: 'e.g. Fix Leaking Sink',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: kAccentGreen, width: 2),
+                        ),
+                        labelStyle: const TextStyle(color: kPrimaryGreen),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a job title';
-                        }
-                        return null;
-                      },
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Gimme a job title, fam!'
+                          : null,
                     ),
                     const SizedBox(height: 16),
+
+                    // Description field with some green flair
                     TextFormField(
                       controller: _descriptionController,
                       maxLines: 5,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Job Description',
-                        hintText: 'Describe the job in detail...',
-                        border: OutlineInputBorder(),
+                        hintText: 'Tell us the deets...',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: kAccentGreen, width: 2),
+                        ),
+                        labelStyle: const TextStyle(color: kPrimaryGreen),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a job description';
-                        }
-                        if (value.length < 30) {
-                          return 'Description should be at least 30 characters';
-                        }
+                        if (value == null || value.isEmpty)
+                          return 'Don’t leave this blank, yo!';
+                        if (value.length < 30)
+                          return 'Make it juicy, at least 30 chars!';
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
+
+                    // Budget field with a green money vibe
                     TextFormField(
                       controller: _budgetController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Budget (ETB)',
-                        hintText: 'Your budget for this job',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.attach_money),
+                        hintText: 'How much you droppin’?',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: kAccentGreen, width: 2),
+                        ),
+                        prefixIcon: const Icon(Icons.attach_money,
+                            color: kPrimaryGreen),
+                        labelStyle: const TextStyle(color: kPrimaryGreen),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your budget';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter a valid number';
-                        }
-                        if (double.parse(value) <= 0) {
-                          return 'Budget must be greater than zero';
-                        }
+                        if (value == null || value.isEmpty)
+                          return 'Gotta set a budget, homie!';
+                        if (double.tryParse(value) == null)
+                          return 'Numbers only, fam!';
+                        if (double.parse(value) <= 0)
+                          return 'Can’t be zero or less, yo!';
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
+
+                    // Location field with green pin
                     TextFormField(
                       controller: _locationController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Location',
-                        hintText: 'Where is the job located?',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.location_on),
+                        hintText: 'Where’s this goin’ down?',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: kAccentGreen, width: 2),
+                        ),
+                        prefixIcon:
+                            const Icon(Icons.location_on, color: kPrimaryGreen),
+                        labelStyle: const TextStyle(color: kPrimaryGreen),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter the job location';
-                        }
-                        return null;
-                      },
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Where’s the spot, fam?'
+                          : null,
                     ),
                     const SizedBox(height: 24),
+
+                    // Additional Details header
                     const Text(
-                      'Additional Details',
+                      'Extra Vibes',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: kPrimaryGreen),
                     ),
                     const SizedBox(height: 16),
+
+                    // Calendar picker tile
                     ListTile(
-                      title: Text(_selectedDate == null
-                          ? 'When do you need this done?'
-                          : 'Scheduled for: ${_selectedDate!.toString().split(' ')[0]}'),
-                      subtitle: const Text('Select date'),
-                      leading: const Icon(Icons.calendar_today),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: Colors.grey[300]!),
+                      title: Text(
+                        _selectedDate == null
+                            ? 'When’s it happenin’?'
+                            : 'Set for: ${_selectedDate!.toString().split(' ')[0]}',
+                        style: const TextStyle(color: kPrimaryGreen),
                       ),
+                      subtitle: const Text('Tap to pick a date'),
+                      leading: const Icon(Icons.calendar_today,
+                          color: kPrimaryGreen),
+                      trailing: const Icon(Icons.arrow_forward_ios,
+                          size: 16, color: kPrimaryGreen),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: kPrimaryGreen),
+                      ),
+                      tileColor: Colors.white,
                       onTap: _showCalendarDialog,
                     ),
                     const SizedBox(height: 12),
+
+                    // File picker tile
                     ListTile(
-                      title: const Text('Add photos or attachments'),
-                      subtitle: Text(_attachments.isEmpty
-                          ? 'Upload images or documents'
-                          : '${_attachments.length} files selected'),
-                      leading: const Icon(Icons.attach_file),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: Colors.grey[300]!),
+                      title: const Text('Add Pics or Docs',
+                          style: TextStyle(color: kPrimaryGreen)),
+                      subtitle: Text(
+                        _attachments.isEmpty
+                            ? 'Upload some goodies'
+                            : '${_attachments.length} files ready',
                       ),
+                      leading:
+                          const Icon(Icons.attach_file, color: kPrimaryGreen),
+                      trailing: const Icon(Icons.arrow_forward_ios,
+                          size: 16, color: kPrimaryGreen),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: kPrimaryGreen),
+                      ),
+                      tileColor: Colors.white,
                       onTap: _pickFiles,
                     ),
+
+                    // Show selected attachments with a green twist
                     if (_attachments.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Wrap(
@@ -407,30 +434,48 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                         children: _attachments
                             .map((file) => Chip(
                                   label: Text(file.path.split('/').last),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _attachments.remove(file);
-                                    });
-                                  },
+                                  backgroundColor:
+                                      kAccentGreen.withOpacity(0.2),
+                                  deleteIconColor: kPrimaryGreen,
+                                  onDeleted: () =>
+                                      setState(() => _attachments.remove(file)),
                                 ))
                             .toList(),
                       ),
                     ],
+                    const SizedBox(height: 16),
+
+                    // New feature: Urgent job toggle
+                    SwitchListTile(
+                      title: const Text('Urgent Job?',
+                          style: TextStyle(color: kPrimaryGreen)),
+                      subtitle: const Text('Need it done ASAP?'),
+                      value: _isUrgent,
+                      activeColor: kAccentGreen,
+                      onChanged: (value) => setState(() => _isUrgent = value),
+                      tileColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: kPrimaryGreen),
+                      ),
+                    ),
                     const SizedBox(height: 32),
+
+                    // Post button with that green pop
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _createJob,
                         style: ElevatedButton.styleFrom(
+                          backgroundColor: kAccentGreen,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 5,
                         ),
-                        child: const Text(
-                          'Post Job',
-                          style: TextStyle(fontSize: 16),
-                        ),
+                        child: const Text('Post That Job!',
+                            style: TextStyle(fontSize: 16)),
                       ),
                     ),
                   ],

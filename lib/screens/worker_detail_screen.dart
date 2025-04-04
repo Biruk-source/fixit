@@ -273,6 +273,10 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
             expandedHeight: 200.0,
             floating: false,
             pinned: true,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(100),
+            ),
+            backgroundColor: Colors.green,
             flexibleSpace: FlexibleSpaceBar(
               title: Text(widget.worker.name,
                   style: const TextStyle(color: Colors.white)),
@@ -343,7 +347,6 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Card(
-                    elevation: 5,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16.0)),
                     child: Container(
@@ -352,7 +355,10 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Colors.white, Colors.blue[50]!],
+                          colors: [
+                            const Color.fromARGB(59, 255, 255, 255),
+                            const Color.fromARGB(255, 195, 230, 255)!
+                          ],
                         ),
                       ),
                       padding: const EdgeInsets.all(16.0),
@@ -367,7 +373,8 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                    color: Colors.blue,
+                                    color:
+                                        const Color.fromARGB(255, 222, 148, 10),
                                     borderRadius: BorderRadius.circular(20)),
                                 child: Text(
                                   '${widget.worker.priceRange.toInt()} ETB/hr',

@@ -5,6 +5,7 @@ import '../../models/user.dart';
 import '../../services/firebase_service.dart';
 import '../payment/payment_screen.dart';
 
+// Yo, this is our JobDetailScreen, gonna make it look fresh af
 class JobDetailScreen extends StatefulWidget {
   final Job job;
 
@@ -31,6 +32,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     _loadJobDetails();
   }
 
+  // Same logic, just keeping it tight
   Future<void> _checkUserRole() async {
     final userProfile = await _firebaseService.getCurrentUserProfile();
     final userId = _firebaseService.getCurrentUser()?.uid;
@@ -45,288 +47,416 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Future<void> _loadJobDetails() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     try {
-      // Load assigned worker details if any
       if (widget.job.workerId != null) {
         final worker =
             await _firebaseService.getWorkerById(widget.job.workerId!);
-        setState(() {
-          _worker = worker;
-        });
+        setState(() => _worker = worker);
       }
-
-      // Load applicants if user is the job seeker
       if (_isJobSeeker && widget.job.applications.isNotEmpty) {
         final applicants =
             await _firebaseService.getJobApplicants(widget.job.id);
-        setState(() {
-          _applicants = applicants;
-        });
+        setState(() => _applicants = applicants);
       }
     } catch (e) {
-      print('Error loading job details: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _applyForJob() async {
-    setState(() {
-      _isApplying = true;
-    });
-
+    setState(() => _isApplying = true);
     try {
       await _firebaseService.addApplicationToUser(widget.job.id);
       await _firebaseService.applyForJob(widget.job.id);
-      setState(() {
-        _hasApplied = true;
-      });
-
+      setState(() => _hasApplied = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Application submitted successfully!'),
-          backgroundColor: Colors.green,
-        ),
+            content: Text('Applied, you’re in!'),
+            backgroundColor: Colors.greenAccent),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Oops: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
-      setState(() {
-        _isApplying = false;
-      });
+      setState(() => _isApplying = false);
     }
   }
 
   Future<void> _assignWorker(String workerId) async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     try {
       await _firebaseService.assignJobToWorker(widget.job.id, workerId);
       await _loadJobDetails();
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Worker assigned successfully!'),
-          backgroundColor: Colors.green,
-        ),
+            content: Text('Worker locked in!'),
+            backgroundColor: Colors.greenAccent),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _markJobAsCompleted() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     try {
       await _firebaseService.updateJobStatus(
           widget.job.id, widget.job.clientId, widget.job.seekerId, 'completed');
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Job marked as completed!'),
-          backgroundColor: Colors.green,
-        ),
+            content: Text('Job done, nice!'),
+            backgroundColor: Colors.greenAccent),
       );
-
-      Navigator.pop(context); // Go back to job dashboard
+      Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Job Details'),
-        actions: [
-          if (_isJobSeeker && widget.job.status != 'completed')
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') {
-                  // Navigate to edit job screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit job coming soon!')),
-                  );
-                } else if (value == 'delete') {
-                  _showDeleteConfirmation();
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: ListTile(
-                    leading: Icon(Icons.edit),
-                    title: Text('Edit Job'),
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: ListTile(
-                    leading: Icon(Icons.delete, color: Colors.red),
-                    title:
-                        Text('Delete Job', style: TextStyle(color: Colors.red)),
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      // Ultra-dark bg with a slick gradient
+      backgroundColor: const Color(0xFF080808),
+      body: CustomScrollView(
+        slivers: [
+          // SliverAppBar with a futuristic edge
+          SliverAppBar(
+            expandedHeight: 240.0, // Taller for that bold presence
+            floating: false,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                fit: StackFit.expand,
                 children: [
-                  _buildJobStatusBanner(),
-                  const SizedBox(height: 16),
-
-                  // Title and budget
-                  Text(
-                    widget.job.title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Image.network(
+                    'https://images.unsplash.com/photo-1521791136064-7986c2920216?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80',
+                    fit: BoxFit.cover,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.attach_money, color: Colors.green),
-                      const SizedBox(width: 4),
-                      Text(
-                        '\$${widget.job.budget.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  // Neon-edged dark overlay
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withOpacity(0.8),
+                          Colors.transparent
+                        ],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Location and date
-                  _buildInfoRow(
-                      Icons.location_on, 'Location', widget.job.location),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(Icons.calendar_today, 'Posted on',
-                      '${widget.job.createdAt.day}/${widget.job.createdAt.month}/${widget.job.createdAt.year}'),
-
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-
-                  // Description
-                  const Text(
-                    'Description',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      border: Border.all(
+                          color: Colors.tealAccent.withOpacity(0.3), width: 2),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.job.description,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-
-                  // Assigned worker section
-                  if (widget.job.status == 'assigned' && _worker != null)
-                    _buildAssignedWorkerSection(),
-
-                  // Applicants section for job poster
-                  if (_isJobSeeker &&
-                      widget.job.status == 'open' &&
-                      _applicants.isNotEmpty)
-                    _buildApplicantsSection(),
-
-                  // Action buttons based on user role and job status
-                  const SizedBox(height: 32),
-                  _buildActionButtons(),
                 ],
               ),
+              title: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.tealAccent.withOpacity(0.4),
+                        blurRadius: 10)
+                  ],
+                ),
+                child: Text(
+                  widget.job.title,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
+                    shadows: [Shadow(color: Colors.tealAccent, blurRadius: 8)],
+                  ),
+                ),
+              ),
+              centerTitle: true,
             ),
+            backgroundColor:
+                const Color(0xFF0D1B2A), // Midnight blue with swagger
+            elevation: 8,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+            ),
+            actions: [
+              if (_isJobSeeker && widget.job.status != 'completed')
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert,
+                      color: Colors.white, size: 28),
+                  color: const Color(0xFF1A1A1A),
+                  elevation: 12,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Edit job dropping soon, fam!')),
+                      );
+                    } else if (value == 'delete') {
+                      _showDeleteConfirmation();
+                    }
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit,
+                            color: Colors.tealAccent, size: 26),
+                        title: Text('Edit Job',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete,
+                            color: Colors.redAccent, size: 26),
+                        title: Text('Delete Job',
+                            style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                        color: Colors.tealAccent, strokeWidth: 3))
+                : Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF080808),
+                          Color(0xFF141414)
+                        ], // Smooth dark flow
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(
+                          28.0), // Extra padding for that luxe feel
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildJobStatusChip(),
+                          const SizedBox(height: 24),
+                          // Budget with a bold neon chip
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeInOut,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.tealAccent.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(
+                                  color: Colors.tealAccent.withOpacity(0.5),
+                                  width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.tealAccent.withOpacity(0.3),
+                                    blurRadius: 12)
+                              ],
+                            ),
+                            child: Text(
+                              '\$${widget.job.budget.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.tealAccent,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // Location and date with slick cards
+                          _buildDetailRow(
+                            icon: Icons.location_on,
+                            title: 'Location',
+                            value: widget.job.location,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildDetailRow(
+                            icon: Icons.calendar_today,
+                            title: 'Posted on',
+                            value:
+                                '${widget.job.createdAt.day}/${widget.job.createdAt.month}/${widget.job.createdAt.year}',
+                          ),
+                          const SizedBox(height: 36),
+                          // Description with a premium dark card
+                          const Text(
+                            'Job Description',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.tealAccent,
+                              letterSpacing: 1.2,
+                              shadows: [
+                                Shadow(color: Colors.tealAccent, blurRadius: 8)
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeInOut,
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF141414),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                  color: Colors.tealAccent.withOpacity(0.3),
+                                  width: 1.5),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 16)
+                              ],
+                            ),
+                            child: Text(
+                              widget.job.description,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white70,
+                                height: 1.7,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 36),
+                          // Assigned worker section
+                          if (widget.job.status == 'assigned' &&
+                              _worker != null)
+                            _buildAssignedWorkerCard(),
+                          // Applicants section
+                          if (_isJobSeeker &&
+                              widget.job.status == 'open' &&
+                              _applicants.isNotEmpty)
+                            _buildApplicantsSection(),
+                          // Action buttons
+                          const SizedBox(height: 36),
+                          _buildActionButtons(),
+                          const SizedBox(height: 60),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildJobStatusBanner() {
-    Color bannerColor;
-    String statusMessage;
-    IconData statusIcon;
+// Status chip with a bold neon vibe
+  Widget _buildJobStatusChip() {
+    Color chipColor;
+    String statusText;
 
     switch (widget.job.status) {
       case 'open':
-        bannerColor = Colors.blue;
-        statusMessage = 'This job is open for applications';
-        statusIcon = Icons.access_time;
+        chipColor = Colors.tealAccent;
+        statusText = 'Open for applications';
         break;
       case 'assigned':
-        bannerColor = Colors.orange;
-        statusMessage = 'This job is in progress';
-        statusIcon = Icons.engineering;
+        chipColor = Colors.orangeAccent;
+        statusText = 'In progress';
         break;
       case 'completed':
-        bannerColor = Colors.green;
-        statusMessage = 'This job has been completed';
-        statusIcon = Icons.check_circle;
+        chipColor = Colors.greenAccent;
+        statusText = 'Completed';
         break;
       default:
-        bannerColor = Colors.grey;
-        statusMessage = 'Unknown status';
-        statusIcon = Icons.help_outline;
+        chipColor = Colors.grey;
+        statusText = 'Unknown';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: bannerColor.withOpacity(0.1),
-        border: Border.all(color: bannerColor),
-        borderRadius: BorderRadius.circular(8),
+        color: chipColor.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(color: chipColor.withOpacity(0.4), blurRadius: 12)
+        ],
+      ),
+      child: Text(
+        statusText,
+        style: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+// Detail row with a sharp dark card
+  Widget _buildDetailRow(
+      {required IconData icon, required String title, required String value}) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: Colors.tealAccent.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 10)
+        ],
       ),
       child: Row(
         children: [
-          Icon(statusIcon, color: bannerColor),
-          const SizedBox(width: 12),
+          Icon(icon, color: Colors.tealAccent, size: 26),
+          const SizedBox(width: 14),
           Text(
-            statusMessage,
-            style: TextStyle(
+            '$title: ',
+            style: const TextStyle(
               fontSize: 16,
-              color: bannerColor,
-              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.white70,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
         ],
@@ -334,61 +464,47 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: Colors.grey[600]),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAssignedWorkerSection() {
+// Assigned worker card with a handsome dark glow
+  Widget _buildAssignedWorkerCard() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Assigned Professional',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: Colors.tealAccent,
+            letterSpacing: 1.2,
+            shadows: [Shadow(color: Colors.tealAccent, blurRadius: 8)],
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
+        const SizedBox(height: 24),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
+            color: const Color(0xFF141414),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+                color: Colors.tealAccent.withOpacity(0.3), width: 1.5),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 16)
+            ],
           ),
           child: Row(
             children: [
               CircleAvatar(
-                radius: 30,
+                radius: 45,
                 backgroundImage: NetworkImage(_worker!.profileImage),
-                onBackgroundImageError: (e, s) => {},
+                backgroundColor: Colors.grey[900],
                 child: _worker!.profileImage.isEmpty
-                    ? const Icon(Icons.person, size: 30)
+                    ? const Icon(Icons.person, size: 45, color: Colors.white70)
                     : null,
+                foregroundColor: Colors.tealAccent.withOpacity(0.2),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 24),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,28 +512,32 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                     Text(
                       _worker!.name,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       _worker!.profession,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
-                        color: Colors.grey[600],
+                        color: Colors.grey,
+                        letterSpacing: 0.8,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.star, color: Colors.amber, size: 20),
+                        const SizedBox(width: 8),
                         Text(
                           '${_worker!.rating} (${_worker!.completedJobs} jobs)',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: Colors.white70,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
@@ -426,7 +546,22 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.phone, color: Colors.blue),
+                icon: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.tealAccent.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.tealAccent.withOpacity(0.5), width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.tealAccent.withOpacity(0.3),
+                          blurRadius: 10)
+                    ],
+                  ),
+                  child: const Icon(Icons.phone,
+                      color: Colors.tealAccent, size: 26),
+                ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Calling ${_worker!.name}...')),
@@ -436,163 +571,226 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        const Divider(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 36),
       ],
     );
   }
 
+// Applicants section with dope dark cards
   Widget _buildApplicantsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Applicants (${_applicants.length})',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _applicants.length,
-          itemBuilder: (context, index) {
-            final applicant = _applicants[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Applicants',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: Colors.tealAccent,
+                letterSpacing: 1.2,
+                shadows: [Shadow(color: Colors.tealAccent, blurRadius: 8)],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 25,
-                      backgroundImage: applicant['profileImage'] != null
-                          ? NetworkImage(applicant['profileImage'])
-                          : null,
-                      child: applicant['profileImage'] == null
-                          ? const Icon(Icons.person, size: 25)
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            applicant['name'] ?? 'Unknown',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            applicant['profession'] ?? 'Professional',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          if (applicant['rating'] != null)
-                            Row(
-                              children: [
-                                const Icon(Icons.star,
-                                    color: Colors.amber, size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${applicant['rating']} (${applicant['completedJobs'] ?? 0} jobs)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => _assignWorker(applicant['id']),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text('Hire'),
-                    ),
-                  ],
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.tealAccent.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.tealAccent.withOpacity(0.5), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.tealAccent.withOpacity(0.3), blurRadius: 10)
+                ],
+              ),
+              child: Text(
+                '${_applicants.length}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  color: Colors.tealAccent,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
                 ),
               ),
-            );
-          },
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        const Divider(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        ..._applicants.map((applicant) => _buildApplicantCard(applicant)),
       ],
     );
   }
 
+// Applicant card with a sharp, handsome glow
+  Widget _buildApplicantCard(Map<String, dynamic> applicant) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(24),
+        border:
+            Border.all(color: Colors.tealAccent.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 16)
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 35,
+            backgroundImage: applicant['profileImage'] != null
+                ? NetworkImage(applicant['profileImage'])
+                : null,
+            backgroundColor: Colors.grey[900],
+            child: applicant['profileImage'] == null
+                ? const Icon(Icons.person, size: 35, color: Colors.white70)
+                : null,
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  applicant['name'] ?? 'Unknown',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  applicant['profession'] ?? 'Professional',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                if (applicant['rating'] != null)
+                  Row(
+                    children: [
+                      const Icon(Icons.star, color: Colors.amber, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${applicant['rating']} (${applicant['completedJobs'] ?? 0} jobs)',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.white70,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => _assignWorker(applicant['id']),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.tealAccent,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              elevation: 6,
+              shadowColor: Colors.black54,
+            ),
+            child: const Text(
+              'Hire',
+              style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Action buttons with a bold, neon swagger
   Widget _buildActionButtons() {
     // Worker viewing an open job they haven't applied to
     if (_isWorker && widget.job.status == 'open' && !_hasApplied) {
-      return ElevatedButton(
-        onPressed: _isApplying ? null : _applyForJob,
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: _isApplying ? null : _applyForJob,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.tealAccent,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            elevation: 8,
+            shadowColor: Colors.tealAccent.withOpacity(0.5),
           ),
-          minimumSize: const Size.fromHeight(50),
-        ),
-        child: _isApplying
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
+          child: _isApplying
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 3, color: Colors.black),
+                )
+              : const Text(
+                  'Apply for This Job',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                      letterSpacing: 1.2),
                 ),
-              )
-            : const Text(
-                'Apply for This Job',
-                style: TextStyle(fontSize: 16),
-              ),
+        ),
       );
     }
 
     // Worker viewing an open job they have applied to
     if (_isWorker && widget.job.status == 'open' && _hasApplied) {
-      return Container(
-        padding: const EdgeInsets.all(16),
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(20),
+          border:
+              Border.all(color: Colors.tealAccent.withOpacity(0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 10)
+          ],
         ),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.green),
-            const SizedBox(width: 12),
+            const Icon(Icons.check_circle, color: Colors.tealAccent, size: 26),
+            const SizedBox(width: 14),
             const Expanded(
               child: Text(
                 'You have applied for this job',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(
+                    fontSize: 16, color: Colors.white70, letterSpacing: 0.5),
               ),
             ),
             TextButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Feature coming soon!')),
+                  const SnackBar(content: Text('Cancel feature coming soon!')),
                 );
               },
-              child: const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -605,32 +803,52 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         widget.job.workerId == _firebaseService.getCurrentUser()?.uid) {
       return Column(
         children: [
-          ElevatedButton(
-            onPressed: () => _markJobAsCompleted(),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              minimumSize: const Size.fromHeight(50),
-              backgroundColor: Colors.green,
-            ),
-            child: const Text(
-              'Mark as Completed',
-              style: TextStyle(fontSize: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _markJobAsCompleted(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.greenAccent,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                elevation: 8,
+                shadowColor: Colors.greenAccent.withOpacity(0.5),
+              ),
+              child: const Text(
+                'Mark as Completed',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    letterSpacing: 1.2),
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Feature coming soon!')),
-              );
-            },
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              minimumSize: const Size.fromHeight(50),
-            ),
-            child: const Text(
-              'Contact Client',
-              style: TextStyle(fontSize: 16),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Contact feature coming soon!')),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                side: const BorderSide(color: Colors.tealAccent, width: 2),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text(
+                'Contact Client',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.tealAccent,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ),
           ),
         ],
@@ -639,17 +857,42 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     // Client viewing their own job
     if (_isJobSeeker) {
-      if (widget.job.status == 'open') {
-        // If open and no applications
-        if (widget.job.applications.isEmpty) {
-          return Column(
-            children: [
-              const Text(
-                'No applications yet',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+      if (widget.job.status == 'open' && widget.job.applications.isEmpty) {
+        return Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF141414),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.tealAccent.withOpacity(0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.4), blurRadius: 10)
+                ],
               ),
-              const SizedBox(height: 16),
-              OutlinedButton(
+              child: Column(
+                children: [
+                  const Icon(Icons.people_alt_outlined,
+                      size: 48, color: Colors.tealAccent),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No applications yet',
+                    style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white70,
+                        letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -657,53 +900,86 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   );
                 },
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  minimumSize: const Size.fromHeight(50),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  side: const BorderSide(color: Colors.tealAccent, width: 2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
                 ),
-                child: const Text(
-                  'Share this Job',
-                  style: TextStyle(fontSize: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.share, size: 24, color: Colors.tealAccent),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Share this Job',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.tealAccent,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          );
-        }
+            ),
+          ],
+        );
       } else if (widget.job.status == 'assigned') {
         return Column(
           children: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PaymentScreen(job: widget.job),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: Colors.green,
-              ),
-              child: const Text(
-                'Pay Now',
-                style: TextStyle(fontSize: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => PaymentScreen(job: widget.job)),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.tealAccent,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  elevation: 8,
+                  shadowColor: Colors.tealAccent.withOpacity(0.5),
+                ),
+                child: const Text(
+                  'Pay Now',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                      letterSpacing: 1.2),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Chat feature coming soon!')),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: const Text(
-                'Message Worker',
-                style: TextStyle(fontSize: 16),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chat feature coming soon!')),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  side: const BorderSide(color: Colors.tealAccent, width: 2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+                child: const Text(
+                  'Message Worker',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.tealAccent,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
               ),
             ),
           ],
@@ -711,35 +987,57 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       } else if (widget.job.status == 'completed') {
         return Column(
           children: [
-            ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Review feature coming soon!')),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: const Text(
-                'Leave a Review',
-                style: TextStyle(fontSize: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Review feature coming soon!')),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.tealAccent,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  elevation: 8,
+                  shadowColor: Colors.tealAccent.withOpacity(0.5),
+                ),
+                child: const Text(
+                  'Leave a Review',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                      letterSpacing: 1.2),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Feature coming soon!')),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: const Text(
-                'Post Similar Job',
-                style: TextStyle(fontSize: 16),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Feature coming soon!')),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  side: const BorderSide(color: Colors.tealAccent, width: 2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+                child: const Text(
+                  'Post Similar Job',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.tealAccent,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
               ),
             ),
           ],
@@ -747,43 +1045,43 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       }
     }
 
-    // Default - just view details
     return const SizedBox.shrink();
   }
 
+  // Delete confirmation with a modern dialog
   void _showDeleteConfirmation() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Job'),
-        content: const Text('Are you sure you want to delete this job?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Job',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('You sure you wanna ditch this job?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Nah, keep it')),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
                 await _firebaseService.deleteJob(widget.job.id);
-                Navigator.pop(context); // Go back to job dashboard
+                Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Job deleted successfully'),
-                    backgroundColor: Colors.green,
-                  ),
+                      content: Text('Job gone, peace!'),
+                      backgroundColor: Colors.greenAccent),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Error deleting job: $e'),
-                    backgroundColor: Colors.red,
-                  ),
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.redAccent),
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Yup, delete',
+                style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),

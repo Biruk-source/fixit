@@ -402,30 +402,53 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            _userType == 'client' ? 'Find Professionals' : 'Available Jobs'),
-        backgroundColor: const Color.fromARGB(255, 255, 255, 255),
-        elevation: 0,
+          _userType == 'client' ? 'Find Pros' : 'Job Hunt',
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+          ),
+        ),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.deepPurple[900]!, Colors.indigo[600]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        elevation: 10,
+        shadowColor: Colors.black.withOpacity(0.5),
         actions: [
+          // Notification Icon with a juicy badge
           IconButton(
             icon: Stack(
               alignment: Alignment.topRight,
               children: [
-                const Icon(Icons.notifications),
+                const Icon(Icons.notifications, size: 30, color: Colors.white),
                 Container(
-                  padding: const EdgeInsets.all(2),
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: const LinearGradient(
+                      colors: [Colors.redAccent, Colors.orangeAccent],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.6),
+                        blurRadius: 6,
+                      ),
+                    ],
                   ),
-                  constraints: const BoxConstraints(
-                    minWidth: 16,
-                    minHeight: 16,
-                  ),
+                  constraints:
+                      const BoxConstraints(minWidth: 20, minHeight: 20),
                   child: const Text(
                     '3',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -441,8 +464,9 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+          // History Icon with a smooth hover effect
           IconButton(
-            icon: const Icon(Icons.history),
+            icon: const Icon(Icons.history, size: 30, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
@@ -451,8 +475,13 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+          // Refresh Icon with a rotating animation
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: AnimatedRotation(
+              turns: _isLoading ? 1 : 0,
+              duration: const Duration(milliseconds: 500),
+              child: const Icon(Icons.refresh, size: 30, color: Colors.white),
+            ),
             onPressed: () {
               if (_userType == 'client') {
                 _loadWorkers();

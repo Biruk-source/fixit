@@ -17,19 +17,21 @@ class AuthService {
   }
 
   // Sign in with email and password
-  Future<UserCredential> signInWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> signInWithEmailAndPassword(
+      String email, String password) async {
     try {
       // Trim inputs to avoid whitespace issues
       email = email.trim();
       password = password.trim();
-      
+
       print('Attempting to sign in with email: $email');
-      
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+
+      final UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       print('Successfully signed in user: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -39,19 +41,21 @@ class AuthService {
   }
 
   // Create user with email and password
-  Future<UserCredential> createUserWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> createUserWithEmailAndPassword(
+      String email, String password) async {
     try {
       // Trim inputs to avoid whitespace issues
       email = email.trim();
       password = password.trim();
-      
+
       print('Attempting to create user with email: $email');
-      
-      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+
+      final UserCredential userCredential =
+          await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      
+
       print('Successfully created user: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -88,11 +92,13 @@ class AuthService {
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      String collectionName = userType == 'client' ? 'clients' : 'professionals';
-      
-      print('Creating profile in $collectionName collection for user: ${user.uid}');
+      String collectionName =
+          userType == 'client' ? 'clients' : 'professionals';
+
+      print(
+          'Creating profile in $collectionName collection for user: ${user.uid}');
       await _firestore.collection(collectionName).doc(user.uid).set(userData);
-      
+
       // Also create entry in workers collection if professional
       if (userType != 'client' && profession != null && profession.isNotEmpty) {
         await _firestore.collection('workers').doc(user.uid).set({
@@ -110,7 +116,7 @@ class AuthService {
           'profileImage': '',
         });
       }
-      
+
       print('Successfully created user profile');
     } catch (e) {
       print('Error creating user profile: $e');
@@ -126,27 +132,29 @@ class AuthService {
         print('No authenticated user found for profile retrieval');
         return null;
       }
-      
+
       print('Attempting to retrieve profile for user: ${user.uid}');
-      
+
       // Check in professionals collection first
-      final professionalDoc = await _firestore.collection('professionals').doc(user.uid).get();
+      final professionalDoc =
+          await _firestore.collection('professionals').doc(user.uid).get();
       if (professionalDoc.exists && professionalDoc.data() != null) {
         final data = professionalDoc.data()!;
         data['id'] = user.uid; // Ensure ID is set
         print('Found professional profile for ${user.uid}');
         return AppUser.fromJson(data);
       }
-      
+
       // Then check in clients collection
-      final clientDoc = await _firestore.collection('clients').doc(user.uid).get();
+      final clientDoc =
+          await _firestore.collection('clients').doc(user.uid).get();
       if (clientDoc.exists && clientDoc.data() != null) {
         final data = clientDoc.data()!;
         data['id'] = user.uid; // Ensure ID is set
         print('Found client profile for ${user.uid}');
         return AppUser.fromJson(data);
       }
-      
+
       // If no profile found, return null
       print('No profile found for user ${user.uid}');
       return null;
