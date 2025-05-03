@@ -31,49 +31,66 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  
-  # Firebase packages
   firebase_core: ^3.12.1
-
   firebase_auth: ^5.5.1
   cloud_firestore: ^5.6.5
   firebase_storage: ^12.4.4
   google_nav_bar: ^5.0.6
   line_icons: ^2.0.1
   google_fonts: ^6.2.1
-
-  
-  # Other utilities
+  qr_code_scanner_plus: ^2.0.10+1
+  permission_handler: ^12.0.0+1
+  connectivity_plus: ^5.0.0
   url_launcher: ^6.2.5
   cached_network_image: ^3.3.1
   provider: ^6.1.1
   intl: ^0.19.0
   shared_preferences: ^2.2.2
-  image_picker: ^1.0.7
+  image_picker: ^1.0.3
   table_calendar: ^3.0.9
   file_picker: ^9.2.1
   path_provider: ^2.0.11
   lottie: ^3.3.1
   marquee: ^2.3.0
   animated_rating_stars: ^1.0.1
-
   timeago: ^3.6.1
   share_plus: ^7.2.1
-  shimmer: ^2.0.0
+  flutter_staggered_grid_view: ^0.7.0
+
   confetti: ^0.8.0
   flutter_svg: ^2.0.4
+  flutter_telebirr: ^0.0.4
+  liquid_pull_to_refresh: ^3.0.1
+  carousel_slider: ^5.0.0
+  flutter_localization: ^0.3.2
+  supabase_flutter: ^2.8.4
 
+
+ 
+  http: ^1.1.0
+  crypto: ^3.0.3
+  animate_do: ^4.2.0
+  another_flushbar: ^1.12.30
+  pinput: ^4.0.0
+  flutter_secure_storage: ^8.0.0
+  pointycastle: ^3.9.1
+  flutter_staggered_animations: ^1.1.1
+  google_sign_in: ^6.3.0
+  # For custom animations/effects
+  simple_animations: ^5.0.2
+  font_awesome_flutter: ^10.5.0
+  
+  shimmer: ^3.0.0
   
   
 
+ 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -89,7 +106,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
-    - assets/animaitons/
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

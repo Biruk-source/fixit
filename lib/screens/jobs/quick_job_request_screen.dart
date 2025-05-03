@@ -310,13 +310,14 @@ class _QuickJobRequestScreenState extends State<QuickJobRequestScreen> {
                     child: Row(
                       children: [
                         const Icon(Icons.error,
-                            color: Colors.redAccent, size: 24),
+                            color: Color.fromARGB(255, 215, 190, 190),
+                            size: 24),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             _errorMessage!,
                             style: const TextStyle(
-                              color: Colors.redAccent,
+                              color: Color.fromARGB(255, 229, 255, 0),
                               fontSize: 16,
                               letterSpacing: 0.5,
                             ),

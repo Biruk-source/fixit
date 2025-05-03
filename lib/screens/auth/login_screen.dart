@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
+import 'package:animate_do/animate_do.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // For Google icon
+import 'package:provider/provider.dart'; // If using LocaleProvider
+
 import '../../services/auth_service.dart';
+import '../../services/app_string.dart'; // Import AppStrings
+import '../../providers/locale_provider.dart'; // Import LocaleProvider
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -14,31 +20,43 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  // Core setup
   final AuthService _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // State for UI magic
   bool _isLoading = false;
+  bool _isGoogleLoading = false; // Separate loading for Google
   bool _obscurePassword = true;
-  bool _rememberMe = false;
+  // bool _rememberMe = false; // Removed for simplicity, add back if needed
+
   late AnimationController _animController;
-  late Animation<double> _fadeAnimation; // Fixed: Properly marked as late
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    // Setup animation controller
     _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
+        vsync: this, duration: const Duration(milliseconds: 1000));
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
-    );
+        CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic));
     _animController.forward();
+    // _trySilentGoogleSignIn(); // Optionally attempt silent sign-in
+  }
+
+  // Optional: Try silent sign-in
+  Future<void> _trySilentGoogleSignIn() async {
+    try {
+      bool signedIn = await _authService
+          .signInSilentlyWithGoogle(); // Assumes this method exists
+      if (signedIn && mounted) {
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (route) => false);
+      }
+    } catch (e) {
+      print(
+          "Silent sign-in failed: $e"); // Ignore errors, user needs to sign in manually
+    }
   }
 
   @override
@@ -49,9 +67,11 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  // Login logic
   Future<void> _login() async {
-    if (_formKey.currentState!.validate()) {
+    final appStrings = AppLocalizations.of(context);
+    if (appStrings == null) return; // Needed for error messages
+
+    if (_formKey.currentState?.validate() ?? false) {
       setState(() => _isLoading = true);
       try {
         await _authService.signInWithEmailAndPassword(
@@ -62,81 +82,188 @@ class _LoginScreenState extends State<LoginScreen>
         Navigator.of(context)
             .pushNamedAndRemoveUntil('/home', (route) => false);
       } on FirebaseAuthException catch (e) {
-        _showSnackBar(_getErrorMessage(e.code), Colors.redAccent);
+        if (mounted)
+          _showErrorSnackbar(_getLoginErrorMessage(e.code, appStrings));
       } catch (e) {
-        _showSnackBar('Login failed: $e', Colors.redAccent);
+        if (mounted) _showErrorSnackbar(appStrings.loginErrorUnknown);
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
 
-  // Error message handler
-  String _getErrorMessage(String code) {
-    switch (code) {
-      case 'user-not-found':
-        return 'No user found, fam';
-      case 'wrong-password':
-        return 'Password’s off, yo';
-      case 'invalid-email':
-        return 'Email’s whack';
-      case 'user-disabled':
-        return 'Account’s locked, bro';
-      default:
-        return 'Somethin’ broke, try again';
+  // --- Google Sign In Handler ---
+  Future<void> _handleGoogleSignIn() async {
+    final appStrings = AppLocalizations.of(context);
+    if (appStrings == null) return;
+    setState(() => _isGoogleLoading = true);
+    try {
+      final userCredential = await _authService.signInWithGoogle();
+      if (userCredential != null && userCredential.user != null) {
+        if (!mounted) return;
+        // Navigate to home after successful Google sign-in (profile checked/created in service)
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (route) => false);
+      } else {
+        // User cancelled Google Sign In
+        if (mounted)
+          _showInfoSnackbar(
+              appStrings.googleSignInCancelled); // Add this string
+      }
+    } on FirebaseAuthException catch (e) {
+      print("Google Sign In FirebaseAuthException: ${e.code}");
+      if (mounted)
+        _showErrorSnackbar(_getLoginErrorMessage(e.code, appStrings));
+    } catch (e) {
+      print("Google Sign In Error: $e");
+      if (mounted) _showErrorSnackbar(appStrings.loginErrorGoogleSignIn);
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
-  // Styled snackbar
-  void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        backgroundColor: color.withOpacity(0.9),
+  String _getLoginErrorMessage(String code, AppStrings appStrings) {
+    switch (code) {
+      case 'user-not-found':
+        return appStrings.loginErrorUserNotFound;
+      case 'wrong-password':
+        return appStrings.loginErrorWrongPassword;
+      case 'invalid-email':
+        return appStrings.loginErrorInvalidEmail;
+      case 'user-disabled':
+        return appStrings.loginErrorUserDisabled;
+      case 'too-many-requests':
+        return appStrings.loginErrorTooManyRequests;
+      case 'invalid-credential':
+        return appStrings.loginErrorWrongPassword; // Often means wrong password
+      case 'account-exists-with-different-credential':
+        return appStrings.googleSignInAccountExists; // Add this string
+      default:
+        return appStrings.loginErrorUnknown;
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    /* Use existing helper or paste here */ if (!mounted) return;
+    final theme = Theme.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          Icon(Icons.error_outline_rounded,
+              color: theme.colorScheme.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(message,
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer)))
+        ]),
+        backgroundColor: theme.colorScheme.errorContainer,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(10),
-      ),
-    );
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)));
+  }
+
+  void _showInfoSnackbar(String message) {
+    /* Optional: for non-error info */ if (!mounted) return;
+    final theme = Theme.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          Icon(Icons.info_outline_rounded,
+              color: theme.colorScheme.onSecondaryContainer),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(message,
+                  style:
+                      TextStyle(color: theme.colorScheme.onSecondaryContainer)))
+        ]),
+        backgroundColor: theme.colorScheme.secondaryContainer,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final appStrings = AppLocalizations.of(context);
+
+    // Fallback if strings are not loaded yet
+    if (appStrings == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: [
-              Color(0xFF1A1A2E), // Deep dark blue-black
-              Color(0xFF16213E), // Slightly lighter dark shade
-            ],
+              colorScheme.surface,
+              colorScheme.surfaceContainerLowest
+            ], // Use theme surface colors
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
+          child: Center(
+            // Center the content vertically
+            child: SingleChildScrollView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: Form(
                   key: _formKey,
                   child: Column(
+                    mainAxisAlignment:
+                        MainAxisAlignment.center, // Center vertically
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 60),
-                      _buildHeader(),
-                      const SizedBox(height: 50),
-                      _buildEmailField(),
+                      // Header
+                      FadeInDown(
+                          duration: const Duration(milliseconds: 500),
+                          child: _buildHeader(theme, appStrings)),
+                      const SizedBox(height: 40),
+
+                      // Email Field
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 100),
+                          child: _buildEmailField(theme, appStrings)),
                       const SizedBox(height: 20),
-                      _buildPasswordField(),
+
+                      // Password Field
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 200),
+                          child: _buildPasswordField(theme, appStrings)),
                       const SizedBox(height: 15),
-                      _buildOptionsRow(),
-                      _buildRegisterLink(),
+
+                      // Forgot Password Link
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 300),
+                          child: _buildForgotPasswordLink(theme, appStrings)),
                       const SizedBox(height: 30),
-                      _buildLoginButton(),
-                      const SizedBox(height: 30),
+
+                      // Login Button
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 400),
+                          child: _buildLoginButton(theme, appStrings)),
+                      const SizedBox(height: 20),
+
+                      // OR Separator
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 500),
+                          child: _buildDivider(theme, appStrings)),
+                      const SizedBox(height: 20),
+
+                      // Google Sign-In Button
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 600),
+                          child: _buildGoogleButton(theme, appStrings)),
+                      const SizedBox(height: 40),
+
+                      // Register Link
+                      FadeInUp(
+                          delay: const Duration(milliseconds: 700),
+                          child: _buildRegisterLink(theme, appStrings)),
                     ],
                   ),
                 ),
@@ -148,293 +275,229 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // Header with neon logo and glow
-  Widget _buildHeader() {
-    return Column(
-      children: [
-        AnimatedBuilder(
-          animation: _animController,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: 1.0 + (_animController.value * 0.1), // Subtle pulse
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const RadialGradient(
-                    colors: [
-                      Color.fromARGB(255, 37, 240, 254),
-                      Color.fromARGB(0, 255, 141, 141)
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF00DDEB).withOpacity(0.4),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.handyman,
-                  size: 80,
-                  color: Colors.white,
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          'FixIt',
-          style: TextStyle(
-            fontSize: 42,
-            fontWeight: FontWeight.w900,
-            color: Colors.white,
-            letterSpacing: 3,
-            shadows: [
-              Shadow(color: Color(0xFF00DDEB), blurRadius: 15),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'Find trusted professionals',
-          style: TextStyle(
-            fontSize: 18,
-            color: Color(0xFF00DDEB),
-            fontStyle: FontStyle.italic,
-            shadows: [
-              Shadow(color: Colors.black54, blurRadius: 5),
-            ],
-          ),
-        ),
-      ],
-    );
+  // --- Helper Widgets ---
+
+  Widget _buildHeader(ThemeData theme, AppStrings appStrings) {
+    // Keep a similar style or adapt to your preference
+    return Column(children: [
+      FadeInDown(
+        // Animation
+        child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.primaryContainer,
+                boxShadow: [
+                  BoxShadow(
+                      color: theme.colorScheme.primary.withOpacity(0.3),
+                      blurRadius: 15,
+                      spreadRadius: 2)
+                ]),
+            child: Icon(Icons.build_circle_outlined,
+                size: 60, color: theme.colorScheme.primary)),
+      ),
+      const SizedBox(height: 20),
+      FadeInDown(
+          delay: const Duration(milliseconds: 100),
+          child: Text(appStrings.loginTitle,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface))),
+      const SizedBox(height: 8),
+      FadeInDown(
+          delay: const Duration(milliseconds: 200),
+          child: Text(appStrings.loginWelcome,
+              style: theme.textTheme.bodyLarge
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)))
+    ]);
   }
 
-  // Email field with dark mode glass effect
-  Widget _buildEmailField() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextFormField(
+  Widget _buildEmailField(ThemeData theme, AppStrings appStrings) {
+    return TextFormField(
         controller: _emailController,
         keyboardType: TextInputType.emailAddress,
-        style: const TextStyle(color: Colors.white),
-        cursorColor: const Color(0xFF00DDEB),
+        style: TextStyle(color: theme.colorScheme.onSurface),
+        cursorColor: theme.colorScheme.primary,
         decoration: InputDecoration(
-          labelText: 'Email',
-          labelStyle: const TextStyle(color: Color(0xFF00DDEB)),
-          filled: true,
-          fillColor: Colors.white.withOpacity(0.1),
-          prefixIcon: const Icon(Icons.email, color: Color(0xFF00DDEB)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(color: Color(0xFF00DDEB), width: 2),
-          ),
-        ),
+            labelText: appStrings.loginEmailLabel,
+            hintText: appStrings.loginEmailHint,
+            prefixIcon: Icon(Icons.alternate_email_rounded,
+                color: theme.colorScheme.primary),
+            // Use styles from _buildTextFormField in CreateJobScreen for consistency
+            filled: true,
+            fillColor:
+                theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withOpacity(0.3))),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: theme.colorScheme.primary, width: 1.5)),
+            errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: theme.colorScheme.error, width: 1.5)),
+            focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: theme.colorScheme.error, width: 2))),
         validator: (value) {
-          if (value == null || value.isEmpty) return 'Email’s a must, yo';
-          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-            return 'Fix that email, fam';
-          }
+          if (value == null || value.isEmpty) return appStrings.loginEmailHint;
+          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value))
+            return appStrings.loginErrorInvalidEmail;
           return null;
-        },
-      ),
-    );
+        });
   }
 
-  // Password field with neon accents
-  Widget _buildPasswordField() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextFormField(
+  Widget _buildPasswordField(ThemeData theme, AppStrings appStrings) {
+    return TextFormField(
         controller: _passwordController,
         obscureText: _obscurePassword,
-        style: const TextStyle(color: Colors.white),
-        cursorColor: const Color(0xFF00DDEB),
+        style: TextStyle(color: theme.colorScheme.onSurface),
+        cursorColor: theme.colorScheme.primary,
         decoration: InputDecoration(
-          labelText: 'Password',
-          labelStyle: const TextStyle(color: Color(0xFF00DDEB)),
-          filled: true,
-          fillColor: Colors.white.withOpacity(0.1),
-          prefixIcon: const Icon(Icons.lock, color: Color(0xFF00DDEB)),
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscurePassword ? Icons.visibility : Icons.visibility_off,
-              color: const Color(0xFF00DDEB),
-            ),
-            onPressed: () =>
-                setState(() => _obscurePassword = !_obscurePassword),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(color: Color(0xFF00DDEB), width: 2),
-          ),
-        ),
-        validator: (value) =>
-            value == null || value.isEmpty ? 'Gimme that password' : null,
-      ),
-    );
+            labelText: appStrings.loginPasswordLabel,
+            hintText: appStrings.loginPasswordHint,
+            prefixIcon: Icon(Icons.lock_outline_rounded,
+                color: theme.colorScheme.primary),
+            suffixIcon: IconButton(
+                icon:
+                    Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: theme.colorScheme.primary.withOpacity(0.7)),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword)),
+            filled: true,
+            fillColor:
+                theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                    color: theme.colorScheme.outlineVariant.withOpacity(0.3))),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: theme.colorScheme.primary, width: 1.5)),
+            errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: theme.colorScheme.error, width: 1.5)),
+            focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: theme.colorScheme.error, width: 2))),
+        validator: (value) => value == null || value.isEmpty ? appStrings.loginPasswordHint : null);
   }
 
-  // Options row with dark mode styling
-  Widget _buildOptionsRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Checkbox(
-              value: _rememberMe,
-              onChanged: (value) => setState(() => _rememberMe = value!),
-              activeColor: const Color(0xFF00DDEB),
-              checkColor: Colors.black,
-            ),
-            const Text('Remember Me', style: TextStyle(color: Colors.white70)),
-          ],
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.push(
+  Widget _buildForgotPasswordLink(ThemeData theme, AppStrings appStrings) {
+    return Align(
+        alignment: Alignment.centerRight,
+        child: TextButton(
+          onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (context) => const ForgotPasswordScreen()),
-            );
-          },
-          child: const Text(
-            'Forgot Password?',
-            style: TextStyle(
-                color: Color(0xFF00DDEB), fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    );
+                  builder: (context) => const ForgotPasswordScreen())),
+          child: Text(appStrings.loginForgotPassword,
+              style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600)),
+        ));
   }
 
-  // Neon login button with hover effect
-  Widget _buildLoginButton() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF00DDEB).withOpacity(0.5),
-            blurRadius: 15,
-            spreadRadius: 1,
-          ),
-        ],
+  Widget _buildLoginButton(ThemeData theme, AppStrings appStrings) {
+    return ElevatedButton(
+      onPressed: _isLoading || _isGoogleLoading ? null : _login,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        minimumSize:
+            const Size(double.infinity, 50), // Full width, fixed height
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        elevation: 3,
       ),
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _login,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00DDEB),
-          foregroundColor: Colors.black,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          elevation: 0,
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                height: 25,
-                width: 25,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                ),
-              )
-            : const Text(
-                'Log In',
-                style: TextStyle(
-                  fontSize: 18,
+      child: _isLoading
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white))
+          : Text(appStrings.loginButton,
+              style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onPrimary,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
+                  letterSpacing: 0.8)),
+    );
+  }
+
+  Widget _buildDivider(ThemeData theme, AppStrings appStrings) {
+    return Row(children: [
+      Expanded(
+          child: Divider(
+              color: theme.colorScheme.outlineVariant.withOpacity(0.5))),
+      Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text("OR",
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+      Expanded(
+          child: Divider(
+              color: theme.colorScheme.outlineVariant.withOpacity(0.5))),
+    ]);
+  }
+
+  Widget _buildGoogleButton(ThemeData theme, AppStrings appStrings) {
+    return OutlinedButton.icon(
+      icon: _isGoogleLoading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const FaIcon(FontAwesomeIcons.google,
+              size: 18), // Use FontAwesome Icon
+      label: Text(appStrings.loginWithGoogle),
+      onPressed: _isLoading || _isGoogleLoading ? null : _handleGoogleSignIn,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: theme.colorScheme.primary,
+        side: BorderSide(color: theme.colorScheme.outline),
+        minimumSize: const Size(double.infinity, 50),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        textStyle:
+            theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }
 
-  Widget _buildRegisterLink() {
+  Widget _buildRegisterLink(ThemeData theme, AppStrings appStrings) {
     return Center(
-      child: RichText(
-        text: TextSpan(
-          text: 'New here? ',
-          style: const TextStyle(
-            fontSize: 16,
-            shadows: [
-              Shadow(
-                color: Color.fromARGB(255, 63, 189, 5),
-                blurRadius: 3,
-                offset: Offset(0, 1),
-              ),
-            ],
-          ),
-          children: [
-            WidgetSpan(
-              child: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [
-                    Color.fromARGB(255, 2, 164, 175),
-                    Color.fromARGB(255, 2, 123, 130)
-                  ],
-                ).createShader(bounds),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Sign Up',
+        child: Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: RichText(
+                text: TextSpan(
+                    text: appStrings.loginNoAccount,
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color:
-                          Colors.white, // This ensures the gradient is visible
-                      shadows: [
-                        Shadow(color: Color(0xFF00DDEB), blurRadius: 10),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 15),
+                    children: [
+                  TextSpan(
+                      text: appStrings.loginSignUpLink,
+                      style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const RegisterScreen())))
+                ]))));
   }
 }

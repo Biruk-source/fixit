@@ -19,6 +19,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen>
   List<Job> _pendingJobs = [];
   String? _userType;
   TabController? _tabController;
+  String currentUserId = '';
 
   @override
   void initState() {
@@ -40,6 +41,9 @@ class _JobHistoryScreenState extends State<JobHistoryScreen>
       setState(() {
         _userType = userProfile.role;
       });
+      setState(() {
+        currentUserId = userProfile.id;
+      });
     }
   }
 
@@ -49,7 +53,7 @@ class _JobHistoryScreenState extends State<JobHistoryScreen>
     });
 
     try {
-      final jobs = await _firebaseService.getUserJobs();
+      final jobs = await _firebaseService.getJobs();
 
       final List<Job> active = [];
       final List<Job> completed = [];

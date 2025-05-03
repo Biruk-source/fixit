@@ -3,13 +3,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'dart:io';
+import 'package:flutter/foundation.dart'
+    show kIsWeb; // For checking web platform
+import 'package:file_picker/file_picker.dart'; // For PlatformFile type
+import 'package:mime/mime.dart';
 import '../models/worker.dart';
 import '../models/job.dart';
 import '../models/user.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final SupabaseClient _supabaseClient = Supabase.instance.client;
   final firebase_storage.FirebaseStorage _storage =
       firebase_storage.FirebaseStorage.instance;
 
@@ -18,7 +24,23 @@ class FirebaseService {
     await Firebase.initializeApp();
   }
 
-  // Get all workers/professionals
+  /// Gets current user ID
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  /// Logs a transaction to Firestore
+  Future<void> logTransaction(Map<String, dynamic> data) async {
+    await _firestore
+        .collection('transactions')
+        .doc(data['transactionId'])
+        .set(data);
+  }
+
+  /// Updates a transaction
+  Future<void> updateTransaction(
+      String transactionId, Map<String, dynamic> data) async {
+    await _firestore.collection('transactions').doc(transactionId).update(data);
+  }
+
   Future<List<Worker>> getWorkers({String? location}) async {
     try {
       List<Worker> workers = [];
@@ -449,7 +471,7 @@ class FirebaseService {
 
       DocumentReference docRef = _firestore.collection('jobs').doc();
       await docRef.set(jobData);
-      // Add the job to the user's jobs collection with the same ID
+
       await _firestore
           .collection('users')
           .doc(jobData['seekerId'])
@@ -649,7 +671,7 @@ class FirebaseService {
 
       // Then check clients collection
       final clientDoc =
-          await _firestore.collection('clients').doc(user.uid).get();
+          await _firestore.collection('users').doc(user.uid).get();
       if (clientDoc.exists) {
         print('Found user in clients collection');
         final data = clientDoc.data() as Map<String, dynamic>;
@@ -670,7 +692,7 @@ class FirebaseService {
 
       // Try to get the newly created profile
       final newClientDoc =
-          await _firestore.collection('clients').doc(user.uid).get();
+          await _firestore.collection('users').doc(user.uid).get();
       if (newClientDoc.exists) {
         final data = newClientDoc.data() as Map<String, dynamic>;
         data['id'] = newClientDoc.id;
@@ -724,7 +746,7 @@ class FirebaseService {
         };
 
         print('Creating client profile for user ${user.uid}');
-        await _firestore.collection('clients').doc(user.uid).set(clientData);
+        await _firestore.collection('users').doc(user.uid).set(clientData);
       } else {
         final professionalData = {
           ...userData,
@@ -922,7 +944,125 @@ class FirebaseService {
     }
   }
 
-  // Upload profile image to Firebase Storage
+  Future<String?> uploadProfileImageToSupabase(File imageFile) async {
+    final User? user = _auth.currentUser; // Use aliased User
+    if (user == null) {
+      print('Error uploading image to Supabase: User not logged in.');
+      return null;
+    }
+
+    const String profileImageBucket = 'images';
+
+    try {
+      final userId = user.uid;
+      // Get file extension, default to jpg if extraction fails or isn't common image type
+      final fileExtension = imageFile.path.split('.').last.toLowerCase();
+      final safeExtension =
+          ['jpg', 'jpeg', 'png', 'gif'].contains(fileExtension)
+              ? fileExtension
+              : 'jpg';
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+      // Path structure: public/<user_id>/<filename>
+      // Using 'public/' is a common convention for public buckets
+      final filePath = 'public/$userId/$fileName';
+
+      print('Uploading profile image to Supabase Storage...');
+      print('  File: ${imageFile.path}');
+      print('  Bucket: $profileImageBucket');
+      print('  Path in bucket: $filePath');
+
+      // Upload the file using Supabase client
+      await _supabaseClient.storage.from(profileImageBucket).upload(
+            filePath,
+            imageFile,
+            fileOptions: const FileOptions(
+              cacheControl: '3600', // Cache for 1 hour
+              upsert: false, // Don't overwrite existing file with same name
+            ),
+          );
+
+      print('Supabase upload successful. Getting public URL...');
+
+      // Get the public URL for the uploaded file
+      final imageUrlResponse = _supabaseClient.storage
+          .from(profileImageBucket)
+          .getPublicUrl(filePath); // Use the same path used in upload()
+
+      // The public URL is directly in the response string
+      final imageUrl = imageUrlResponse;
+
+      print('Supabase Profile Image URL: $imageUrl');
+      return imageUrl;
+    } on StorageException catch (e) {
+      // Catch Supabase-specific storage errors
+      print('[Supabase Storage Error]');
+      print('  Message: ${e.message}');
+      print('  Error details: ${e.error ?? 'N/A'}');
+      print(
+          '  Status code: ${e.statusCode ?? 'N/A'}'); // Will show 404 if bucket not found
+      return null; // Return null on Supabase-specific failure
+    } catch (e, s) {
+      print('[General Error during Supabase upload]');
+      print('  Error: $e');
+      print('  Stack Trace: $s');
+      return null; // Return null on general failure
+    }
+  }
+
+  Future<void> completeWorkerSetup({
+    required String profession,
+    required int experience,
+    required double priceRange,
+    required String location,
+    required List<String> skills,
+    required String about,
+    String? profileImageUrl, // The URL string from Supabase (or null)
+  }) async {
+    final User? user = _auth.currentUser;
+    if (user == null) throw Exception('User not logged in for worker setup');
+
+    final userId = user.uid;
+    print('Completing worker setup/update for user $userId...');
+
+    try {
+      // Data to save/update in the 'professionals' collection
+      final dataToUpdate = {
+        'profession': profession,
+        'experience': experience,
+        'priceRange': priceRange,
+        'location': location,
+        'skills': skills, // Ensure skills are correctly passed
+        'about': about,
+        'profileImage': profileImageUrl, // Save the URL here
+        'profileComplete': true, // Mark profile as complete
+        'role': 'worker', // Ensure role is explicitly worker
+        'userType': 'professional', // Keep for compatibility if needed
+        'updatedAt': FieldValue.serverTimestamp(),
+        // Add other fields if needed, consider merging
+        'name': user.displayName,
+        'email': user.email,
+        'phoneNumber': user.phoneNumber,
+        'rating': FieldValue.increment(
+            0), // Use increment to avoid overwriting if merging
+        'reviewCount': FieldValue.increment(0),
+        'completedJobs': FieldValue.increment(0),
+        'isAvailable': true,
+      };
+
+      // Using set with merge: true is safer for updates
+      await _firestore.collection('professionals').doc(userId).set(
+            dataToUpdate,
+            SetOptions(merge: true),
+          );
+
+      print('Worker profile setup/update completed successfully for $userId.');
+    } catch (e) {
+      print('Error during worker profile setup/update: $e');
+      rethrow;
+    }
+  }
+
   Future<String?> uploadProfileImage(File imageFile) async {
     try {
       final User? user = _auth.currentUser;
@@ -947,7 +1087,7 @@ class FirebaseService {
 
         // Update the appropriate collection
         if (userRole == 'client') {
-          await _firestore.collection('clients').doc(user.uid).update({
+          await _firestore.collection('users').doc(user.uid).update({
             'profileImage': downloadUrl,
           });
         } else {
@@ -1063,17 +1203,104 @@ class FirebaseService {
     }
   }
 
-  // Apply for a job
-  Future<void> applyForJob(String jobId) async {
+  Future<void> updateUserProfileImageInFirestore(
+      String userId, String imageUrl, String role) async {
+    String collectionPath;
+    String normalizedRole = role.toLowerCase();
+    if (normalizedRole == 'worker' || normalizedRole == 'professional') {
+      collectionPath = 'professionals';
+    } else if (normalizedRole == 'client' || normalizedRole == 'seeker') {
+      collectionPath = 'users';
+    } else {
+      print("Error: Unknown user role '$role' for profile image update.");
+      collectionPath = 'users'; // Defaulting
+    }
+    print(
+        "Updating profile image URL in Firestore collection '$collectionPath' for user $userId...");
     try {
-      final User? user = _auth.currentUser;
-      if (user == null) throw 'User not logged in';
-
-      await _firestore.collection('jobs').doc(jobId).update({
-        'applications': FieldValue.arrayUnion([user.uid])
+      await _firestore.collection(collectionPath).doc(userId).update({
+        // Make sure 'profileImage' is the correct field name in YOUR Firestore documents
+        'profileImage': imageUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
+      print(
+          "Firestore profile image URL updated successfully in $collectionPath.");
     } catch (e) {
-      print('Error applying for job: $e');
+      print(
+          "Error updating profile image URL in Firestore ($collectionPath): $e");
+      throw e;
+    }
+  }
+
+  // Apply for a job
+  Future<void> applyForJob(String jobId, String workerId) async {
+    // Get the current worker user ID (redundant if workerId is passed, but good practice)
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null || currentUser.uid != workerId) {
+      throw 'User not logged in or worker ID mismatch';
+    }
+
+    final jobRef = _firestore.collection('jobs').doc(jobId);
+
+    try {
+      // --- Get the clientId (seekerId) from the main job document ---
+      final jobSnapshot = await jobRef.get();
+      if (!jobSnapshot.exists) {
+        throw 'Job document not found in main collection.';
+      }
+      final jobData = jobSnapshot.data() as Map<String, dynamic>?;
+      // Determine the correct client ID field ('seekerId' or 'clientId')
+      final clientId = jobData?['seekerId'] ?? jobData?['clientId'];
+      if (clientId == null || clientId is! String || clientId.isEmpty) {
+        print(
+            'Error in applyForJob: Could not find valid seekerId/clientId in job document $jobId');
+        print('Job Data: $jobData');
+        throw 'Could not find client ID for the job.';
+      }
+      // --- End Get Client ID ---
+
+      // Reference to the job document inside the user's subcollection
+      final userJobRef = _firestore
+          .collection('users')
+          .doc(clientId) // Use the fetched clientId
+          .collection('jobs')
+          .doc(jobId);
+
+      // --- Use a Batch Write for atomic update ---
+      WriteBatch batch = _firestore.batch();
+
+      // 1. Update the main /jobs/{jobId} document
+      batch.update(jobRef, {
+        'applications': FieldValue.arrayUnion([workerId])
+      });
+
+      // 2. Update the /users/{clientId}/jobs/{jobId} document
+      // Important: Check if the user's job subcollection document exists first
+      final userJobSnapshot = await userJobRef.get();
+      if (userJobSnapshot.exists) {
+        print("Updating user's job subcollection document...");
+        batch.update(userJobRef, {
+          'applications': FieldValue.arrayUnion([workerId])
+        });
+      } else {
+        // This case might happen if the initial copy failed or structure changed.
+        // Decide how to handle: Log an error, or maybe create/set it here?
+        // Setting it might overwrite other fields if the structure diverged.
+        print(
+            "Warning: Job document not found in user subcollection /users/$clientId/jobs/$jobId. Only updating main job doc.");
+        // OPTIONALLY: You could try setting it, but be careful:
+        // final initialJobData = { ... create a minimal job map or fetch again ... };
+        // initialJobData['applications'] = [workerId];
+        // batch.set(userJobRef, initialJobData);
+      }
+
+      // Commit the batch
+      await batch.commit();
+      print('Application added to both job locations successfully.');
+      // --- End Batch Write ---
+    } catch (e, s) {
+      print('Error applying for job (batch update): $e\n$s');
+      // Rethrow or handle the error appropriately
       throw e;
     }
   }
@@ -1090,14 +1317,19 @@ class FirebaseService {
 
       if (clientId == null) print('Client ID not found in job document');
 
-      await _firestore
-          .collection('users')
-          .doc(clientId)
-          .collection('jobs')
-          .doc(jobId)
-          .update({
-        'applications': FieldValue.arrayUnion([user.uid])
-      });
+      final userDoc = await _firestore.collection('users').doc(clientId).get();
+      if (userDoc.exists) {
+        await _firestore
+            .collection('users')
+            .doc(clientId)
+            .collection('jobs')
+            .doc(jobId)
+            .set({
+          'applications': FieldValue.arrayUnion([user.uid])
+        }, SetOptions(merge: true));
+      } else {
+        print('Client not found. Cannot add job id to their job applications');
+      }
     } catch (e) {
       print('Error adding job id to user\'s job applications: $e');
       throw e;
@@ -1195,19 +1427,33 @@ class FirebaseService {
   }
 
   Stream<bool> streamProfessionalAvailability(String workerId) {
+    DateTime today = DateTime.now();
+    String todayString =
+        "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+
     return _firestore
         .collection('professionals')
         .doc(workerId)
+        .collection('availability')
+        .doc(todayString)
         .snapshots()
-        .asyncMap((snapshot) async {
+        .map((snapshot) {
       final data = snapshot.data();
-      final bool? isAvailable = data?['isAvailable'] as bool?;
-      if (isAvailable == false) return false;
-      final activeJobs = await _firestore
-          .collection('jobs')
-          .where('workerId', isEqualTo: workerId)
-          .where('status', whereIn: ['in_progress', 'pending']).get();
-      return activeJobs.docs.length < 3;
+      final isAvailable = data?['isAvailable'] as bool? ?? true;
+
+      // If it's today's date and marked unavailable, update it to false
+      if (todayString == todayString && isAvailable == false) {
+        _firestore
+            .collection('professionals')
+            .doc(workerId)
+            .update({'isAvailable': false}).then((_) {
+          print('✅ Successfully updated Firestore to false');
+        }).catchError((error) {
+          print('❌ Error updating Firestore: $error');
+        });
+      }
+
+      return isAvailable;
     });
   }
 
@@ -1312,41 +1558,41 @@ class FirebaseService {
     });
   }
 
+  /// Updates the status of a job across client and professional collections
   Future<bool> updateJobStatus(
     String jobId,
     String? professionalId,
     String clientId,
     String status,
   ) async {
+    final batch = _firestore.batch(); // Initialize Firestore batch
     try {
-      print('✅ Updating job status $jobId to $status');
+      print('✅ Updating job status for job: $jobId to $status');
       print('👨‍💻 Professional ID: $professionalId');
       print('👨‍👩‍👧 Client ID: $clientId');
-      // 1. First verify the job exists in at least one collection
+
+      // Verify job exists and get workerId
       final jobDoc = await _firestore
           .collection('users')
           .doc(clientId)
           .collection('jobs')
           .doc(jobId)
           .get();
-      print('👨‍💻 Job document: $jobDoc');
-      final workerId = jobDoc.data()?['workerId'] as String?;
-      if (workerId == null) {
-        print('workerId not found in job document');
-        return false;
-      }
-      print(workerId);
 
       if (!jobDoc.exists) {
-        print('Job $jobId not found in professional jobs collection');
+        print('🛑 Job $jobId not found in client jobs');
         return false;
       }
 
-      // 2. Prepare batch update
-      final batch = _firestore.batch();
-      final timestamp = FieldValue.serverTimestamp();
+      // Use workerId from jobDoc if available, fallback to professionalId
+      final workerId = jobDoc.data()?['workerId'] as String? ?? professionalId;
+      if (workerId == null) {
+        print('🛑 No valid workerId found for job $jobId');
+        return false;
+      }
+      print('👷 Worker ID resolved: $workerId');
 
-      // Define all collections where this job might exist
+      // Collections to update
       final collectionsToUpdate = [
         // Client collections
         _firestore
@@ -1359,6 +1605,7 @@ class FirebaseService {
             .doc(clientId)
             .collection('jobs')
             .doc(jobId),
+        // Professional collections
         _firestore
             .collection('professionals')
             .doc(workerId)
@@ -1369,24 +1616,30 @@ class FirebaseService {
             .doc(workerId)
             .collection('jobs')
             .doc(jobId),
-        // Professional collections
       ];
-      print('working');
 
-      // 3. Update all locations where the job exists
+      // Update existing documents in batch
       for (final docRef in collectionsToUpdate) {
+        final docSnap = await docRef.get();
+        if (!docSnap.exists) {
+          print('⚠️ Skipping non-existent doc: ${docRef.path}');
+          continue;
+        }
+
+        print('✅ Adding to batch: ${docRef.path}');
         batch.update(docRef, {
           'status': status,
-          'lastUpdated': timestamp,
+          'lastUpdated':
+              FieldValue.serverTimestamp(), // Use Firestore timestamp
         });
       }
 
-      // 4. Execute batch
+      // Commit batch
       await batch.commit();
-      print('Successfully updated job $jobId to status: $status');
+      print('🎉 Successfully updated job $jobId to status: $status');
       return true;
     } catch (e) {
-      print('Error updating job status: $e');
+      print('🔥 Error updating job status: $e');
       return false;
     }
   }
@@ -1449,29 +1702,50 @@ class FirebaseService {
   }
 
   // Get user notifications
-  Future<List<Map<String, dynamic>>> getUserNotifications() async {
+  Stream<List<Map<String, dynamic>>> getUserNotificationsStream() {
+    final User? user = _auth.currentUser;
+    if (user == null) {
+      print("⚠️ No authenticated user found for notification stream.");
+      return Stream.value([]); // Return empty stream if logged out
+    }
+
+    final String userId = user.uid; // Store UID for clearer path reference
+
     try {
-      final User? user = _auth.currentUser;
-      if (user == null) return [];
-
-      final snapshot = await _firestore
-          .collection('notifications')
-          .where('userId', isEqualTo: user.uid)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return data;
-      }).toList();
+      print(
+          "👂 Listening for notifications for user $userId at users/$userId/notifications");
+      return _firestore
+          .collection('users')
+          .doc(userId) // Document of the current user
+          .collection(
+              'notifications') // Their specific notification subcollection
+          .orderBy('createdAt', descending: true) // Show newest first
+          .snapshots() // Real-time stream
+          .map((snapshot) {
+        print(
+            "📬 Received notification snapshot with ${snapshot.docs.length} docs for user $userId.");
+        // IMPORTANT: Ensure the conversion handles null data gracefully if needed.
+        // Using `doc.data()!` asserts non-null, which might crash if a doc is empty.
+        // Safer: Check existence or use `?` and default values.
+        return snapshot.docs
+            .where((doc) =>
+                doc.exists && doc.data() != null) // Filter out potential issues
+            .map((doc) {
+          final data = doc.data() as Map<String, dynamic>; // Now safe to cast
+          data['id'] = doc.id; // *Important:* Add the document ID to the map
+          return data;
+        }).toList();
+      }).handleError((error) {
+        print("🔥 Error in notification stream for user $userId: $error");
+        return <Map<String,
+            dynamic>>[]; // Return empty list on error to prevent UI crash
+      });
     } catch (e) {
-      print('Error getting notifications: $e');
-      return [];
+      print('🔥 Error setting up notification stream for user $userId: $e');
+      return Stream.error(e); // Propagate error to StreamBuilder
     }
   }
 
-  // Mark notification as read
   Future<void> markNotificationAsRead(String notificationId) async {
     try {
       await _firestore.collection('notifications').doc(notificationId).update({
@@ -1558,7 +1832,7 @@ class FirebaseService {
       // Fetch client and pro profiles—make sure they exist
       print('🔍 Lookin’ up client and pro deets...');
       final clientDoc =
-          await _firestore.collection('clients').doc(clientId).get();
+          await _firestore.collection('users').doc(clientId).get();
       final proDoc = await _firestore
           .collection('professionals')
           .doc(professionalId)
@@ -1618,7 +1892,7 @@ class FirebaseService {
       // Client’s side
       batch.set(
         _firestore
-            .collection('clients')
+            .collection('users')
             .doc(clientId)
             .collection('requests')
             .doc(jobId),
@@ -1626,7 +1900,7 @@ class FirebaseService {
       );
       batch.set(
         _firestore
-            .collection('clients')
+            .collection('users')
             .doc(clientId)
             .collection('jobs')
             .doc(jobId),
@@ -1826,15 +2100,14 @@ class FirebaseService {
 
     // 1. Update the main job document
     final jobRef = _firestore.collection('jobs').doc(jobId);
-    batch.set(
-        jobRef,
-        {
-          'status': 'assigned',
-          'workerId': workerId,
-          'assignedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-            merge: true)); // Use merge to update or create if doesn't exist
+    batch.update(
+      jobRef,
+      {
+        'status': 'assigned',
+        'workerId': workerId,
+        'assignedAt': FieldValue.serverTimestamp(),
+      },
+    ); // Use merge to update or create if doesn't exist
 
     // 2. Add to worker's assigned jobs subcollection
     final workerJobRef = _firestore
@@ -1920,12 +2193,97 @@ class FirebaseService {
     }
   }
 
+  Future<String?> uploadJobAttachment({
+    required PlatformFile platformFile, // Input is PlatformFile
+    required String userId, // User ID for path structure
+  }) async {
+    if (userId.isEmpty) {
+      print('Error uploading job attachment: User ID is empty.');
+      return null;
+    }
+
+    // *** CHOOSE YOUR BUCKET NAME - Must exist in Supabase, be public, have INSERT policy ***
+    const String jobAttachmentsBucket = 'job-attachments'; // Example name
+    final String fileName =
+        platformFile.name.replaceAll(RegExp(r'\s+'), '_'); // Sanitize name
+    // Path structure: public/jobs/user_id/timestamp_filename.ext
+    final String filePath =
+        'public/jobs/$userId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+
+    print('Uploading job attachment to Supabase Storage...');
+    print('  File Name: ${platformFile.name}');
+    print('  Bucket: $jobAttachmentsBucket');
+    print('  Path in bucket: $filePath');
+
+    try {
+      // Determine content type
+      final String? mimeType = lookupMimeType(platformFile.name,
+          headerBytes: platformFile.bytes?.take(1024).toList());
+      final fileOptions = FileOptions(
+        cacheControl: '3600', // Cache for 1 hour
+        upsert: false, // Don't overwrite files
+        contentType: mimeType, // Set content type
+      );
+      print('  Detected MIME type: $mimeType');
+
+      if (kIsWeb) {
+        // WEB Upload using bytes
+        if (platformFile.bytes == null)
+          throw Exception('File bytes are null for web upload.');
+        print('  Uploading using bytes (Web)...');
+        // Use uploadBinary for web byte arrays
+        await _supabaseClient.storage.from(jobAttachmentsBucket).uploadBinary(
+              filePath,
+              platformFile.bytes!,
+              fileOptions: fileOptions,
+            );
+      } else {
+        // MOBILE/DESKTOP Upload using path
+        if (platformFile.path == null)
+          throw Exception('File path is null for mobile upload.');
+        print('  Uploading using path (Mobile/Desktop)...');
+        final file = File(platformFile.path!);
+        // Use upload for mobile File objects
+        await _supabaseClient.storage.from(jobAttachmentsBucket).upload(
+              filePath,
+              file,
+              fileOptions: fileOptions,
+            );
+      }
+
+      print('Supabase attachment upload successful. Getting public URL...');
+
+      // Get the public URL for the uploaded file
+      final imageUrlResponse = _supabaseClient.storage
+          .from(jobAttachmentsBucket)
+          .getPublicUrl(filePath);
+
+      final imageUrl = imageUrlResponse; // URL is the string itself
+      print('Supabase Job Attachment URL: $imageUrl');
+      return imageUrl;
+    } on StorageException catch (e) {
+      // Catch specific Supabase errors
+      print('[Supabase Storage Error - Job Attachment]');
+      print(
+          '  Message: ${e.message}'); // This will show bucket not found or RLS errors
+      print('  Error details: ${e.error ?? 'N/A'}');
+      print('  Status code: ${e.statusCode ?? 'N/A'}');
+      return null;
+    } catch (e, s) {
+      print('[General Error during Supabase job attachment upload]');
+      print('  Error: $e');
+      print('  Stack Trace: $s');
+      return null;
+    }
+  }
+
   // Create payment record
   Future<void> createPaymentRecord({
     required String jobId,
     required double amount,
     required String paymentMethod,
     required String status,
+    required String transactionId,
   }) async {
     try {
       final User? user = _auth.currentUser;
@@ -1938,6 +2296,7 @@ class FirebaseService {
         'paymentMethod': paymentMethod,
         'status': status,
         'timestamp': FieldValue.serverTimestamp(),
+        'transactionId': transactionId,
       });
     } catch (e) {
       print('Error creating payment record: $e');

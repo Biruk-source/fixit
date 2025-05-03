@@ -6,6 +6,7 @@ import '../../services/firebase_service.dart';
 import 'job_detail_screen.dart';
 import '../../models/user.dart';
 import '../payment/payment_screen.dart';
+import '../chat_screen.dart';
 
 class JobDashboardScreen extends StatefulWidget {
   const JobDashboardScreen({super.key});
@@ -164,12 +165,12 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
     }
   }
 
-  Future<void> _acceptJob(Job job) async {
+  Future<void> _acceptJob(Job job, userID) async {
     try {
       setState(() => _isLoading = true);
-
+      print(userID);
       await _firebaseService.updateJobStatus(
-          job.id, job.seekerId, job.clientId, 'accepted');
+          job.id, userID, job.clientId, 'accepted');
 
       await _loadJobs();
       _showSuccessSnackbar('Job accepted!');
@@ -225,6 +226,19 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
         builder: (context) => JobApplicationsScreen(job: job),
       ),
     ).then((_) => _loadUserData());
+  }
+
+  void _navigateToChat(Job job, String workerID, String currentUsedID) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          otherUserId: workerID,
+          currentUserId: currentUsedID,
+          jobId: job.id,
+        ),
+      ),
+    );
   }
 
   @override
@@ -783,7 +797,8 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 12),
                                 ),
-                                onPressed: () => _acceptJob(job),
+                                onPressed: () => _acceptJob(job,
+                                    _firebaseService.getCurrentUser()!.uid),
                               ),
                             ),
                             Expanded(
@@ -897,7 +912,8 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                             const SizedBox(width: 8),
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: () => _completeJob(job),
+                                onPressed: () => _completeJob(job,
+                                    _firebaseService.getCurrentUser()!.uid),
                                 child: const Text('Complete'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
@@ -1266,6 +1282,20 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
                                                 fontSize: 12,
                                               ),
                                             ),
+                                            IconButton(
+                                              icon: const Icon(Icons.message,
+                                                  color: Color.fromARGB(
+                                                      255, 0, 0, 0)),
+                                              onPressed: () {
+                                                _navigateToChat(
+                                                  job,
+                                                  applicantId,
+                                                  _firebaseService
+                                                      .getCurrentUser()!
+                                                      .uid,
+                                                );
+                                              },
+                                            ),
                                           ],
                                         ),
                                       ],
@@ -1516,12 +1546,12 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
     return 'just now';
   }
 
-  Future<void> _completeJob(Job job) async {
+  Future<void> _completeJob(Job job, workerID) async {
     try {
       setState(() => _isLoading = true);
       await _firebaseService.updateJobStatus(
         job.id,
-        job.seekerId,
+        workerID,
         job.clientId,
         'completed',
       );
@@ -1539,7 +1569,7 @@ class _JobDashboardScreenState extends State<JobDashboardScreen>
       setState(() => _isLoading = true);
       await _firebaseService.updateJobStatus(
         job.id,
-        job.workerId,
+        job.seekerId,
         job.clientId,
         'started working',
       );
@@ -1818,6 +1848,8 @@ class _JobApplicationsScreenState extends State<JobApplicationsScreen> {
                   onPressed: () => _acceptApplicant(applicant.id),
                   child: const Text('Accept'),
                   style: ElevatedButton.styleFrom(
+                    foregroundColor: const Color.fromARGB(255, 0, 0, 0),
+                    backgroundColor: Color.fromRGBO(68, 73, 212, 1),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                   ),
                 ),

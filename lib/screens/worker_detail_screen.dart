@@ -12,6 +12,7 @@ import '../models/worker.dart';
 import '../services/firebase_service.dart';
 import 'jobs/create_job_screen.dart';
 import 'jobs/quick_job_request_screen.dart';
+import 'chat_screen.dart';
 
 class WorkerDetailScreen extends StatefulWidget {
   final Worker worker;
@@ -720,12 +721,13 @@ class _WorkerDetailScreenState extends State<WorkerDetailScreen> {
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 20),
                           ],
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

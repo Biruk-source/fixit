@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // Import for Color
 
 class Job {
   final String clientId;
@@ -21,7 +21,10 @@ class Job {
   final String? workerPhone;
   final bool isRequest;
   final String? workerExperience;
-  final String? scheduledDate;
+  // --- FIXED: Added attachments field ---
+  final List<String> attachments; // Store URLs from Storage
+  // --- FIXED: Changed scheduledDate to DateTime? ---
+  final DateTime? scheduledDate;
 
   Job({
     required this.clientId,
@@ -43,29 +46,42 @@ class Job {
     this.workerPhone,
     this.isRequest = false,
     this.workerExperience,
+    // --- FIXED: Added attachments to constructor, provide default ---
+    this.attachments = const [], // Default to empty list if not provided
+    // --- FIXED: Changed scheduledDate type ---
     this.scheduledDate,
   });
 
   // Convert Firestore DocumentSnapshot to Job
   factory Job.fromDocumentSnapshot(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    // Ensure ID is passed correctly to fromFirestore if not already in data
     return Job.fromFirestore(data..['id'] = doc.id);
   }
 
   // Convert JSON/Firestore data to Job
   factory Job.fromFirestore(Map<String, dynamic> data) {
+    // Helper function to safely parse Timestamp or null
+    DateTime? _parseTimestamp(Timestamp? timestamp) {
+      return timestamp?.toDate();
+    }
+
     return Job(
-      id: data['id'] ?? '',
-      clientId: data['clientId'] ?? data['seekerId'] ?? '',
-      seekerId: data['seekerId'] ?? '',
+      id: data['id'] ?? '', // Make sure ID is handled
+      clientId: data['clientId'] ?? data['seekerId'] ?? '', // Added fallback
+      seekerId: data['seekerId'] ?? data['clientId'] ?? '', // Added fallback
       title: data['title'] ?? '',
       description: data['description'] ?? '',
       location: data['location'] ?? '',
       budget: (data['budget'] ?? 0.0).toDouble(),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseTimestamp(data['createdAt'] as Timestamp?) ??
+          DateTime.now(), // Use helper
       status: data['status']?.toString().toLowerCase() ?? 'open',
       workerId: data['workerId']?.toString(),
       applications: List<String>.from(data['applications'] ?? []),
+      // --- FIXED: Parsing for attachments ---
+      attachments: List<String>.from(
+          data['attachments'] ?? []), // Expecting a list of strings (URLs)
       clientName: data['clientName']?.toString() ?? 'Unknown Client',
       workerName: data['workerName']?.toString() ?? 'Unknown Professional',
       workerImage: data['workerImage']?.toString(),
@@ -74,24 +90,29 @@ class Job {
       workerPhone: data['workerPhone']?.toString(),
       isRequest: data['isRequest'] == true,
       workerExperience: data['workerExperience']?.toString(),
-      scheduledDate: data['scheduledDate']?.toString(),
+      // --- FIXED: Parsing for scheduledDate ---
+      scheduledDate:
+          _parseTimestamp(data['scheduledDate'] as Timestamp?), // Use helper
     );
   }
 
   // Convert Job to Firestore/JSON data
   Map<String, dynamic> toFirestore() {
     return {
-      'id': id,
+      // Generally exclude 'id' when writing, as it's the document ID
+      // 'id': id,
       'clientId': clientId,
       'seekerId': seekerId,
       'title': title,
       'description': description,
       'location': location,
       'budget': budget,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': Timestamp.fromDate(createdAt), // Store as Timestamp
       'status': status,
-      'workerId': workerId,
+      'workerId': workerId, // Will store null if null
       'applications': applications,
+      // --- FIXED: Added attachments ---
+      'attachments': attachments,
       'clientName': clientName,
       'workerName': workerName,
       'workerImage': workerImage,
@@ -100,11 +121,13 @@ class Job {
       'workerPhone': workerPhone,
       'isRequest': isRequest,
       'workerExperience': workerExperience,
-      'scheduledDate': scheduledDate,
+      // --- FIXED: Store Timestamp or null ---
+      'scheduledDate':
+          scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
     };
   }
 
-  // For JSON compatibility
+  // For JSON compatibility (often used with APIs, here just points to Firestore method)
   factory Job.fromJson(Map<String, dynamic> json) => Job.fromFirestore(json);
   Map<String, dynamic> toJson() => toFirestore();
 
@@ -119,17 +142,22 @@ class Job {
     double? budget,
     DateTime? createdAt,
     String? status,
-    String? workerId,
+    // Use Object? to allow explicitly setting workerId to null
+    Object? workerId = const _Undefined(),
     List<String>? applications,
+    // --- FIXED: Added attachments ---
+    List<String>? attachments,
     String? clientName,
     String? workerName,
-    String? workerImage,
-    String? workerProfession,
-    double? workerRating,
-    String? workerPhone,
+    // Use Object? for nullable fields to allow setting them to null
+    Object? workerImage = const _Undefined(),
+    Object? workerProfession = const _Undefined(),
+    Object? workerRating = const _Undefined(),
+    Object? workerPhone = const _Undefined(),
     bool? isRequest,
-    String? workerExperience,
-    String? scheduledDate,
+    Object? workerExperience = const _Undefined(),
+    // --- FIXED: Changed scheduledDate type ---
+    Object? scheduledDate = const _Undefined(),
   }) {
     return Job(
       clientId: clientId ?? this.clientId,
@@ -141,17 +169,32 @@ class Job {
       budget: budget ?? this.budget,
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
-      workerId: workerId ?? this.workerId,
+      // Handle explicit null for workerId
+      workerId: workerId is _Undefined ? this.workerId : workerId as String?,
       applications: applications ?? this.applications,
+      // --- FIXED: Added attachments ---
+      attachments: attachments ?? this.attachments,
       clientName: clientName ?? this.clientName,
       workerName: workerName ?? this.workerName,
-      workerImage: workerImage ?? this.workerImage,
-      workerProfession: workerProfession ?? this.workerProfession,
-      workerRating: workerRating ?? this.workerRating,
-      workerPhone: workerPhone ?? this.workerPhone,
+      // Handle explicit null for nullable fields
+      workerImage:
+          workerImage is _Undefined ? this.workerImage : workerImage as String?,
+      workerProfession: workerProfession is _Undefined
+          ? this.workerProfession
+          : workerProfession as String?,
+      workerRating: workerRating is _Undefined
+          ? this.workerRating
+          : workerRating as double?,
+      workerPhone:
+          workerPhone is _Undefined ? this.workerPhone : workerPhone as String?,
       isRequest: isRequest ?? this.isRequest,
-      workerExperience: workerExperience ?? this.workerExperience,
-      scheduledDate: scheduledDate ?? this.scheduledDate,
+      workerExperience: workerExperience is _Undefined
+          ? this.workerExperience
+          : workerExperience as String?,
+      // --- FIXED: Changed scheduledDate type and handle explicit null ---
+      scheduledDate: scheduledDate is _Undefined
+          ? this.scheduledDate
+          : scheduledDate as DateTime?,
     );
   }
 
@@ -165,11 +208,18 @@ class Job {
         return Colors.blue;
       case 'assigned':
         return Colors.orange;
+      case 'accepted':
+        return Colors.purple; // Added distinct color
+      case 'started working':
+      case 'in_progress':
+        return Colors.lightBlue; // Added distinct color
       case 'completed':
         return Colors.green;
       case 'pending':
         return Colors.amber;
       case 'cancelled':
+      case 'rejected':
+      case 'closed':
         return Colors.red;
       default:
         return Colors.grey;
@@ -180,17 +230,24 @@ class Job {
   IconData get statusIcon {
     switch (status.toLowerCase()) {
       case 'open':
-        return Icons.access_time;
+        return Icons.hourglass_empty_rounded;
       case 'assigned':
-        return Icons.engineering;
+        return Icons.assignment_ind_outlined;
+      case 'accepted':
+        return Icons.thumb_up_alt_outlined;
+      case 'started working':
+      case 'in_progress':
+        return Icons.construction_rounded;
       case 'completed':
-        return Icons.check_circle;
+        return Icons.check_circle_outline_rounded;
       case 'pending':
-        return Icons.pending;
+        return Icons.pending_outlined;
       case 'cancelled':
-        return Icons.cancel;
+      case 'rejected':
+      case 'closed':
+        return Icons.cancel_outlined;
       default:
-        return Icons.help_outline;
+        return Icons.help_outline_rounded;
     }
   }
 
@@ -204,9 +261,13 @@ class Job {
       identical(this, other) ||
       other is Job &&
           runtimeType == other.runtimeType &&
-          id == other.id &&
-          status == other.status;
+          id == other.id; // Usually comparing by ID is sufficient
 
   @override
-  int get hashCode => id.hashCode ^ status.hashCode;
+  int get hashCode => id.hashCode;
+}
+
+// Helper class for copyWith to distinguish between null and not provided
+class _Undefined {
+  const _Undefined();
 }
