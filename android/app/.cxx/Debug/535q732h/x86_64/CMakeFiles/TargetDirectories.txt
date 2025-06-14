@@ -1,2 +1,0 @@
-C:/Users/ZhuanZ/Desktop/New folder/fixit/android/app/.cxx/Debug/535q732h/x86_64/CMakeFiles/edit_cache.dir
-C:/Users/ZhuanZ/Desktop/New folder/fixit/android/app/.cxx/Debug/535q732h/x86_64/CMakeFiles/rebuild_cache.dir

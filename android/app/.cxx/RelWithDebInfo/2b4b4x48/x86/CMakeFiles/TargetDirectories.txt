@@ -1,2 +1,0 @@
-C:/Users/ZhuanZ/Desktop/fixit/android/app/.cxx/RelWithDebInfo/2b4b4x48/x86/CMakeFiles/edit_cache.dir
-C:/Users/ZhuanZ/Desktop/fixit/android/app/.cxx/RelWithDebInfo/2b4b4x48/x86/CMakeFiles/rebuild_cache.dir

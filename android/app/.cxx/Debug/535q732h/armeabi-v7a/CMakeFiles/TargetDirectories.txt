@@ -1,2 +1,0 @@
-C:/Users/ZhuanZ/Desktop/New folder/fixit/android/app/.cxx/Debug/535q732h/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/Users/ZhuanZ/Desktop/New folder/fixit/android/app/.cxx/Debug/535q732h/armeabi-v7a/CMakeFiles/rebuild_cache.dir
